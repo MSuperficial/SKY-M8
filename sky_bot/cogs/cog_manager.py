@@ -2,6 +2,8 @@ from discord.ext import commands
 
 from .greeting import Greeting
 
+__all__ = ("CogManager",)
+
 _cogs_dict = {
     Greeting.__name__: Greeting,
 }

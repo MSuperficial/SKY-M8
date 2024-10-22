@@ -6,6 +6,8 @@ from discord.ext import commands, tasks
 from .sky_event import get_all_daily_event_msg, respond_daily_event
 from .utils import get_id_from_env, sky_time_now
 
+__all__ = ("SkyBot",)
+
 
 class SkyBot(commands.Bot):
     _DAILY_EVENT_MSG_ID = "-# ᴰᵃᶦˡʸᴱᵛᵉⁿᵗˢ"

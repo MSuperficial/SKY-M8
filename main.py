@@ -6,8 +6,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from sky_bot import SkyBot
-from sky_bot.cogs.cog_manager import CogManager
-from sky_bot.cogs.greeting import Greeting
+from sky_bot.cogs import CogManager, Greeting
 
 load_dotenv(override=True)
 

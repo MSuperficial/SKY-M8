@@ -5,6 +5,8 @@ from discord.ext import commands
 
 from ..utils import get_id_from_env
 
+__all__ = ("Greeting",)
+
 
 class Greeting(commands.Cog):
     def __init__(self, bot):

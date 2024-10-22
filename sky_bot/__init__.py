@@ -1,4 +1,3 @@
-from .cogs import *
-from .sky_event import *
+from . import cogs, sky_event
 from .sky_bot import *
 from .utils import *

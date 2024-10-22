@@ -1,6 +1,11 @@
 from enum import Enum
 from typing import NamedTuple
 
+__all__ = (
+    "DailyEvent",
+    "daily_event_datas",
+)
+
 
 class DailyEvent(Enum):
     GEYSER = (1,)
