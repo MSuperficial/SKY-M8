@@ -6,25 +6,33 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from sky_bot import SkyBot
-from sky_bot.cogs import CogManager, Greeting
+from sky_bot.cogs import CogManager
 
 load_dotenv(override=True)
 
 
 async def main():
-    intents = discord.Intents.default()
-    intents.members = True
-    intents.message_content = True
-
-    bot = SkyBot(commands.when_mentioned_or("!"), intents=intents)
-
     token = os.getenv("SKYBOT_TOKEN")
     if token is None:
         raise Exception("Please add your token to .env file.")
 
+    intents = discord.Intents.default()
+    intents.members = True
+    intents.message_content = True
+
+    initial_extensions = [
+        "greeting",
+        "daily_clock",
+    ]
+
+    bot = SkyBot(
+        commands.when_mentioned_or("!"),
+        initial_extensions=initial_extensions,
+        intents=intents,
+    )
+
     async with bot:
         await bot.add_cog(CogManager(bot))
-        await bot.add_cog(Greeting(bot))
         try:
             await bot.start(token)
         except discord.HTTPException as e:

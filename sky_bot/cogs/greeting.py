@@ -39,3 +39,7 @@ class Greeting(commands.Cog):
         else:
             hello = f"Hello {author.mention}!"
         await ctx.send(hello)
+
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Greeting(bot))
