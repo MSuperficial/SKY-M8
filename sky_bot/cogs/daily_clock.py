@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime
+import typing
+from datetime import datetime, timedelta
 
 import discord
 from discord.ext import commands, tasks
@@ -7,6 +8,7 @@ from discord.utils import format_dt as timestamp
 
 from ..sky_bot import SkyBot
 from ..sky_event import DailyEvent, daily_event_datas, get_daily_event_time
+from ..sky_event.shard import get_shard_info
 from ..utils import msg_exist_async, sky_time_now
 
 __all__ = ("DailyClock",)
@@ -37,6 +39,10 @@ class DailyClock(commands.Cog):
 
     def get_all_daily_event_msg(self, when: datetime, header=True, footer=True):
         dailies = list(DailyEvent)
+        shard_info = get_shard_info(when)
+        # 如果今天Peaks Shard不提供烛火，则无需显示其信息
+        if not (shard_info.has_shard and shard_info.extra_shard):
+            dailies.remove(DailyEvent.PEAKS_SHARD)  # 移除该事件
         msgs = [self.get_daily_event_msg(when, e) for e in dailies]
         dailies_msg = "\n".join(msgs)
         if header:
@@ -49,9 +55,10 @@ class DailyClock(commands.Cog):
         return dailies_msg
 
     @commands.command()
-    async def daily(self, ctx: commands.Context):
+    async def daily(self, ctx: commands.Context, offset: typing.Optional[int] = 0):
         now = sky_time_now()
-        msg = self.get_all_daily_event_msg(now)
+        date = now + timedelta(days=offset)
+        msg = self.get_all_daily_event_msg(date)
         await ctx.send(msg)
 
     # 事件信息每5分钟更新一次

@@ -1,8 +1,8 @@
 import os
-from datetime import datetime
+from datetime import datetime, time
 
 import discord
-import pytz
+from zoneinfo import ZoneInfo
 
 __all__ = (
     "SKY_TIMEZONE",
@@ -11,7 +11,7 @@ __all__ = (
     "msg_exist_async",
 )
 
-SKY_TIMEZONE = pytz.timezone("America/Los_Angeles")
+SKY_TIMEZONE = ZoneInfo("America/Los_Angeles")
 
 
 def get_id_from_env(key):
@@ -24,8 +24,20 @@ def sky_time_now() -> datetime:
     return datetime.now(SKY_TIMEZONE)
 
 
+def sky_datetime(
+    year, month, day, hour=0, minute=0, second=0, microsecond=0
+) -> datetime:
+    return datetime(
+        year, month, day, hour, minute, second, microsecond, tzinfo=SKY_TIMEZONE
+    )
+
+
+def sky_time(hour=0, minute=0, second=0, microsecond=0) -> time:
+    return time(hour, minute, second, microsecond, tzinfo=SKY_TIMEZONE)
+
+
 def code_block(msg, lang=None):
-    return f"```{lang}\nmsg\n```"
+    return f"```{lang}\n{msg}\n```"
 
 
 async def msg_exist_async(msg: discord.Message):

@@ -8,10 +8,11 @@ __all__ = (
 
 
 class DailyEvent(Enum):
-    GEYSER = (1,)
-    GRANDMA = (2,)
-    TURTLE = (3,)
-    DAILY_RESET = (4,)
+    GEYSER = 10
+    PEAKS_SHARD = 20
+    GRANDMA = 30
+    TURTLE = 40
+    DAILY_RESET = 50
 
 
 class DailyEventData(NamedTuple):
@@ -24,6 +25,7 @@ class DailyEventData(NamedTuple):
 
 daily_event_ids = {
     "geyser": DailyEvent.GEYSER,
+    "peaksshard": DailyEvent.PEAKS_SHARD,
     "granny": DailyEvent.GRANDMA,
     "grandma": DailyEvent.GRANDMA,
     "turtle": DailyEvent.TURTLE,
@@ -37,6 +39,13 @@ daily_event_datas = {
         offset=5,
         period=120,
         duration=10,
+    ),
+    DailyEvent.PEAKS_SHARD: DailyEventData(
+        id=DailyEvent.PEAKS_SHARD,
+        name="🏔️ Peaks Shard",
+        offset=8,
+        period=30,
+        duration=22,
     ),
     DailyEvent.GRANDMA: DailyEventData(
         id=DailyEvent.GRANDMA,

@@ -23,6 +23,7 @@ async def main():
     initial_extensions = [
         "greeting",
         "daily_clock",
+        "shard_calendar",
     ]
 
     bot = SkyBot(
