@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import typing
@@ -31,7 +30,7 @@ class ShardCalendar(commands.Cog):
         # 设置更新时间
         self.set_update_time()
         self.update_calendar_msg.start()
-        self.change_calendar_update_time.start()
+        self.refresh_calendar_state.start()
 
     async def cog_unload(self):
         self.update_calendar_msg.cancel()
@@ -162,7 +161,7 @@ class ShardCalendar(commands.Cog):
         # 设置在今天所有碎片的降落和结束时间更新
         now = sky_time_now()
         info = get_shard_info(now)
-        times = [t.time() for st in info.occurrences for t in st[1:]]
+        times = [t.timetz() for st in info.occurrences for t in st[1:]]
         self.update_calendar_msg.change_interval(time=times)
 
     @commands.command()
@@ -204,11 +203,13 @@ class ShardCalendar(commands.Cog):
         # 先更新一次
         await self.update_calendar_msg()
 
-    @tasks.loop(time=sky_time(23, 59, 59))
-    async def change_calendar_update_time(self):
-        # 每天刚开始时修改碎片消息的更新时间
-        await asyncio.sleep(2)
+    @tasks.loop(time=sky_time(0, 0))
+    async def refresh_calendar_state(self):
+        # 每天刚开始时刷新一次碎片消息
+        self.update_calendar_msg()
+        # 然后修改碎片消息的更新时间
         self.set_update_time()
+        print(f"[{sky_time_now()}] Calendar state updated.")
 
 
 _default_translation = {
