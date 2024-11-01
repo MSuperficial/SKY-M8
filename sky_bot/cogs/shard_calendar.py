@@ -206,7 +206,7 @@ class ShardCalendar(commands.Cog):
     @tasks.loop(time=sky_time(0, 0))
     async def refresh_calendar_state(self):
         # 每天刚开始时刷新一次碎片消息
-        self.update_calendar_msg()
+        await self.update_calendar_msg()
         # 然后修改碎片消息的更新时间
         self.set_update_time()
         print(f"[{sky_time_now()}] Calendar state updated.")
