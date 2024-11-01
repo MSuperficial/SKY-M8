@@ -9,7 +9,7 @@ from discord.utils import format_dt as timestamp
 
 from ..sky_bot import SkyBot
 from ..sky_event.shard import ShardInfo, ShardType, get_shard_info
-from ..utils import msg_exist_async, sky_time, sky_time_now
+from ..utils import code_block, msg_exist_async, sky_time, sky_time_now
 from .daily_clock import DailyClock
 
 __all__ = ("ShardCalendar",)
@@ -198,10 +198,22 @@ class ShardCalendar(commands.Cog):
 
     @update_calendar_msg.before_loop
     async def setup_update_calendar_msg(self):
+        # 设置更新时间
+        self.set_update_time()
         # 等待客户端就绪
         await self.bot.wait_until_ready()
         # 先更新一次
         await self.update_calendar_msg()
+
+    @update_calendar_msg.error
+    async def calendar_error(self, error):
+        task_name = self.update_calendar_msg.coro.__name__
+        error_msg = (
+            f"Error during task `{task_name}`: `{type(error).__name__}`\n"
+            f"{code_block(error)}"
+        )
+        print(error_msg)
+        await self.bot.owner.send(error_msg)
 
     @tasks.loop(time=sky_time(0, 0))
     async def refresh_calendar_state(self):

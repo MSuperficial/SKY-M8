@@ -14,6 +14,7 @@ class SkyBot(commands.Bot):
         self.guild_id = get_id_from_env("GUILD_ID")
         self.bot_channel_id = get_id_from_env("BOT_CHANNEL_ID")
         self.bot_channel: discord.TextChannel = None
+        self._owner: discord.User = None
 
     async def setup_hook(self) -> None:
         # 加载初始扩展
@@ -23,6 +24,12 @@ class SkyBot(commands.Bot):
 
     async def on_ready(self):
         print(f"We have logged in as {self.user}")
+
+    @property
+    def owner(self):
+        if self._owner is None:
+            self._owner = self.get_user(self.owner_id)
+        return self._owner
 
     def is_mine(self, message: discord.Message):
         return message.author == self.user

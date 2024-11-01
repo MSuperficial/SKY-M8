@@ -9,7 +9,7 @@ from discord.utils import format_dt as timestamp
 from ..sky_bot import SkyBot
 from ..sky_event import DailyEvent, daily_event_datas, get_daily_event_time
 from ..sky_event.shard import get_shard_info
-from ..utils import msg_exist_async, sky_time_now
+from ..utils import code_block, msg_exist_async, sky_time_now
 
 __all__ = ("DailyClock",)
 
@@ -99,6 +99,16 @@ class DailyClock(commands.Cog):
         wait_second = (5 * 60) - second % (5 * 60)
         print(f"[{now}] Getting ready, wait {wait_second} seconds for next 5 minutes.")
         await asyncio.sleep(wait_second)
+
+    @update_clock_msg.error
+    async def clock_error(self, error):
+        task_name = self.update_clock_msg.coro.__name__
+        error_msg = (
+            f"Error during task `{task_name}`: `{type(error).__name__}`\n"
+            f"{code_block(error)}"
+        )
+        print(error_msg)
+        await self.bot.owner.send(error_msg)
 
 
 async def setup(bot: commands.Bot):
