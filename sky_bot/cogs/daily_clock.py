@@ -20,6 +20,7 @@ class DailyClock(commands.Cog):
     def __init__(self, bot: SkyBot):
         self.bot = bot
         self.clock_message: discord.Message = None
+        self.last_msg_hash = hash(None)
         self.update_clock_msg.start()
 
     async def cog_unload(self):
@@ -61,17 +62,22 @@ class DailyClock(commands.Cog):
         msg = self.get_all_daily_event_msg(date)
         await ctx.send(msg)
 
-    # 事件信息每5分钟更新一次
-    @tasks.loop(minutes=5)
+    # 事件信息每分钟检查一次更新
+    @tasks.loop(minutes=1)
     async def update_clock_msg(self):
         # 生成事件信息
         now = sky_time_now()
         daily_event_msg = self.get_all_daily_event_msg(now)
         daily_event_msg = self._CLOCK_MSG_ID + "\n" + daily_event_msg
+        # 如果消息内容和上一次更新相同则跳过
+        msg_hash = hash(daily_event_msg)
+        if msg_hash == self.last_msg_hash:
+            return
         # 如果已记录消息，则直接更新
         message = self.clock_message
         if message and await msg_exist_async(message):
             await message.edit(content=daily_event_msg)
+            self.last_msg_hash = msg_hash
             print(f"[{sky_time_now()}] Success editting clock message.")
             return
         # 查找频道和消息
@@ -86,6 +92,7 @@ class DailyClock(commands.Cog):
             print(f"[{sky_time_now()}] Success editing clock message.")
         # 记录消息，下次可以直接使用
         self.clock_message = message
+        self.last_msg_hash = msg_hash
 
     @update_clock_msg.before_loop
     async def wait_on_minute(self):
@@ -93,11 +100,10 @@ class DailyClock(commands.Cog):
         await self.bot.wait_until_ready()
         # 先更新一次
         await self.update_clock_msg()
-        # 等待到下一个5分钟整
+        # 等待到下一个1分钟整
         now = sky_time_now()
-        second = now.minute * 60 + now.second
-        wait_second = (5 * 60) - second % (5 * 60)
-        print(f"[{now}] Getting ready, wait {wait_second} seconds for next 5 minutes.")
+        wait_second = 60 - now.second
+        print(f"[{now}] Getting ready, wait {wait_second} seconds for next minute.")
         await asyncio.sleep(wait_second)
 
     @update_clock_msg.error
