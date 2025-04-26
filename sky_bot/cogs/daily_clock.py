@@ -30,12 +30,14 @@ class DailyClock(commands.Cog):
         name = daily_event_datas[daily_id].name
         current_end, next_begin = get_daily_event_time(when, daily_id)
         # 事件名称
-        msg = f"## {name}\n"
+        msg = f"### {name}\n"
         # 当前事件结束时间
         if current_end is not None:
-            msg += f"🔹 Current ends {timestamp(current_end, 'R')}.\n"
+            msg += f"-# 🔹 Current ends {timestamp(current_end, 'R')}.\n"
         # 下次事件开始时间
-        msg += f"🔸 Next at {timestamp(next_begin, 't')}, {timestamp(next_begin, 'R')}."
+        msg += (
+            f"-# 🔸 Next at {timestamp(next_begin, 't')}, {timestamp(next_begin, 'R')}."
+        )
         return msg
 
     def get_all_daily_event_msg(self, when: datetime, header=True, footer=True):
@@ -51,7 +53,7 @@ class DailyClock(commands.Cog):
         if footer:
             dailies_msg = (
                 dailies_msg
-                + "\n\n*See [Sky Clock](<https://sky-clock.netlify.app>) by [Chris Stead](<https://github.com/cmstead>) for more.*"
+                + "\n\n-# *See [Sky Clock](<https://sky-clock.netlify.app>) by [Chris Stead](<https://github.com/cmstead>) for more.*"
             )
         return dailies_msg
 
