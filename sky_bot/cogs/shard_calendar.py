@@ -42,58 +42,55 @@ class ShardCalendar(commands.Cog):
             val = _default_translation
         return val
 
-    def _date_msg(self, info: ShardInfo):
-        # 日期信息
-        msg = f"- **__Date__:** {timestamp(info.date, 'D')}"
-        return msg
+    def _embed_color(self, info: ShardInfo):
+        if info.type == ShardType.Black:
+            return discord.Color.from_str("#6A5ACD")
+        else:
+            return discord.Color.from_str("#B22222")
 
-    def _type_msg(self, info: ShardInfo):
+    def _date_field(self, info: ShardInfo):
+        # 日期信息
+        field = timestamp(info.date, "D")
+        return field
+
+    def _type_field(self, info: ShardInfo):
         # 碎片类型信息
-        msg = f"{info.type.name} Shard"
+        field = f"{info.type.name} Shard"
         # 如果设置了emoji就添加
         emojis = self._config("emojis")
         type_emoji = emojis.get(info.type.name)
         if type_emoji:
-            msg = type_emoji + " " + msg
+            field = type_emoji + " " + field
         # 奖励类型及数量
         reward_unit = emojis.get(info.reward_type.name, info.reward_type.name)
-        msg += f" ({info.reward_number} {reward_unit})"
-        msg = "- **__Type__:** " + msg
-        return msg
+        field += f" [{info.reward_number} {reward_unit}]"
+        return field
 
-    def _map_msg(self, info: ShardInfo):
-        # 碎片位置信息
-        msg = "- **__Map__:** "
+    def _map_field(self, info: ShardInfo):
         trans = self._config("translations")
-        graph = self._config("infographics")
-        msg += trans[info.realm] + " || "
-        # 给地图名称添加图片链接
-        if link := graph.get(".".join([info.realm, info.map])):
-            msg += f"[{trans[info.map]}]({link})"
-        else:
-            msg += trans[info.map]
-        return msg
+        field = trans[info.map] + ", " + trans[info.realm]
+        return field
 
-    def _timeline_msg(self, info: ShardInfo, now=None):
+    def _timeline_field(self, info: ShardInfo, now=None):
         # 时间线信息
         def _occur(land, end):
             time_range = f"{timestamp(land, 'T')} - {timestamp(end, 'T')}"
             if now < land:
-                msg = f"-# 🔸 {time_range}, lands {timestamp(land, 'R')}"  # 还未降落
+                field = f"-# ▸ {time_range}, lands {timestamp(land, 'R')}"  # 还未降落
             elif now < end:
-                msg = f"-# 🔹 {time_range}, ends {timestamp(end, 'R')}"  # 已经降落
+                time_range = f"~~{timestamp(land, 'T')}~~ - {timestamp(end, 'T')}"
+                field = f"-# ▸ {time_range}, ends {timestamp(end, 'R')}"  # 已经降落
             else:
-                msg = f"-# ▪️ ~~{time_range}~~"  # 已经结束
-            return msg
+                field = f"-# ▸ ~~{time_range}~~"  # 已经结束
+            return field
 
         now = now or sky_time_now()
-        msg = "- **__Timeline__:**\n"
         # 取降落时间和结束时间为起止时间（忽略开始时间）
         occur_msgs = [_occur(land, end) for start, land, end in info.occurrences]
-        msg += "\n".join(occur_msgs)
-        return msg
+        field = "\n".join(occur_msgs)
+        return field
 
-    def _coming_msg(self, info: ShardInfo, days):
+    def _coming_field(self, info: ShardInfo, days):
         # 接下来几天的碎片类型
         emojis = self._config("emojis")
 
@@ -109,10 +106,9 @@ class ShardCalendar(commands.Cog):
                 symbol = "|| " + symbol
             return symbol
 
-        msg = "- **__The coming days__:**\n"
         days_symbol = [_symbol(info.date + timedelta(days=i + 1)) for i in range(days)]
-        msg += " ".join(days_symbol)
-        return msg
+        field = " ".join(days_symbol)
+        return field
 
     def _extra_msg(self, info: ShardInfo):
         # 额外碎片信息
@@ -126,36 +122,45 @@ class ShardCalendar(commands.Cog):
             msg = msg.replace("Daily Clock", f"[Daily Clock](<{clock_msg.jump_url}>)")
         return msg
 
-    def get_shard_event_msg(self, when: datetime, now=None, header=True, footer=True):
+    def get_shard_event_embed(self, when: datetime, now=None):
         info = get_shard_info(when)
+        emojis = self._config("emojis")
+        graph = self._config("infographics")
         if info.has_shard:
-            # 添加完整碎石事件信息
-            msg = "\n".join(
-                [
-                    m
-                    for m in [
-                        self._date_msg(info),
-                        self._type_msg(info),
-                        self._map_msg(info),
-                        self._timeline_msg(info, now),
-                        self._extra_msg(info),
-                        self._coming_msg(info, self._config("coming_days")),
-                    ]
-                    if m != ""
-                ]
+            embed = (
+                discord.Embed(
+                    color=self._embed_color(info),
+                    description=f"-# Shard Calendar - {self._date_field(info)}\n## {self._type_field(info)}",
+                )
+                .add_field(
+                    name=emojis.get("Map") + " " + "__Map__",
+                    value=self._map_field(info),
+                )
+                .add_field(
+                    name=emojis.get("Timeline") + " " + "__Timeline__",
+                    value=self._timeline_field(info, now),
+                    inline=False,
+                )
+                .add_field(
+                    name=emojis.get("Next") + " " + "__Coming days__",
+                    value=self._coming_field(info, self._config("coming_days")),
+                    inline=False,
+                )
+                .set_image(url=graph.get(".".join([info.realm, info.map])))
             )
         else:
-            # 没有碎石事件，只添加后续几天信息
-            msg = "## ☀️ **It's a no shard day!**\n"
-            msg += self._coming_msg(info, self._config("coming_days"))
-        if header:
-            msg = "# 🌋 Shard Calendar\n" + msg
-        if footer:
-            msg = (
-                msg
-                + "\n\n-# *See [Sky Shards](<https://sky-shards.pages.dev/>) by [Plutoy](<https://github.com/PlutoyDev>) for more.*"
+            embed = (
+                discord.Embed(
+                    color=discord.Color.from_str("#DAA520"),
+                    description=f"-# Shard Calendar - {timestamp(info.date, 'D')}\n## ☀️ No Shard Day",
+                )
+                .add_field(
+                    name=emojis.get("Next") + " " + "__Coming days__",
+                    value=self._coming_field(info, self._config("coming_days")),
+                )
+                .set_image(url=graph.get("noshard"))
             )
-        return msg
+        return embed
 
     def set_update_time(self):
         # 设置在今天所有碎片的降落和结束时间更新
@@ -168,19 +173,18 @@ class ShardCalendar(commands.Cog):
     async def shard(self, ctx: commands.Context, offset: typing.Optional[int] = 0):
         now = sky_time_now()
         when = now + timedelta(days=offset)
-        msg = self.get_shard_event_msg(when)
-        await ctx.send(msg)
+        embed = self.get_shard_event_embed(when)
+        await ctx.send(embed=embed)
 
     @tasks.loop()
     async def update_calendar_msg(self):
         # 生成事件信息
         now = sky_time_now()
-        shard_event_msg = self.get_shard_event_msg(now)
-        shard_event_msg = self._CALENDAR_MSG_ID + "\n" + shard_event_msg
+        shard_event_embed = self.get_shard_event_embed(now)
         # 如果已记录消息，则直接更新
         message = self.calendar_message
         if message and await msg_exist_async(message):
-            await message.edit(content=shard_event_msg)
+            await message.edit(content=self._CALENDAR_MSG_ID, embed=shard_event_embed)
             print(f"[{sky_time_now()}] Success editting calendar message.")
             return
         # 查找频道和消息
@@ -188,10 +192,12 @@ class ShardCalendar(commands.Cog):
         message = await self.bot.search_message_async(channel, self._CALENDAR_MSG_ID)
         # 如果消息不存在，则发送新消息；否则编辑现有消息
         if message is None:
-            message = await channel.send(shard_event_msg)
+            message = await channel.send(
+                content=self._CALENDAR_MSG_ID, embed=shard_event_embed
+            )
             print(f"[{sky_time_now()}] Success sending calendar message.")
         else:
-            await message.edit(content=shard_event_msg)
+            await message.edit(content=self._CALENDAR_MSG_ID, embed=shard_event_embed)
             print(f"[{sky_time_now()}] Success editing calendar message.")
         # 记录消息，下次可以直接使用
         self.calendar_message = message
