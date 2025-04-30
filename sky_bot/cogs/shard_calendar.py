@@ -1,9 +1,9 @@
 import json
 import os
-import typing
 from datetime import datetime, timedelta
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt as timestamp
 
@@ -18,6 +18,9 @@ __all__ = ("ShardCalendar",)
 class ShardCalendar(commands.Cog):
     _CONFIG_PATH_ = "extern_config/shard.json"
     _CALENDAR_MSG_ID = "-# ˢʰᵃʳᵈᴱᵛᵉⁿᵗ"
+    group_shards = app_commands.Group(
+        name="shards", description="A group of commands to view and config shards information."
+    )
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
@@ -63,7 +66,7 @@ class ShardCalendar(commands.Cog):
             field = type_emoji + " " + field
         # 奖励类型及数量
         reward_unit = emojis.get(info.reward_type.name, info.reward_type.name)
-        field += f" [{info.reward_number} {reward_unit}]"
+        field += f" [{info.reward_number}{reward_unit}]"
         return field
 
     def _map_field(self, info: ShardInfo):
@@ -169,12 +172,41 @@ class ShardCalendar(commands.Cog):
         times = [t.timetz() for st in info.occurrences for t in st[1:]]
         self.update_calendar_msg.change_interval(time=times)
 
-    @commands.command()
-    async def shard(self, ctx: commands.Context, offset: typing.Optional[int] = 0):
+    @app_commands.command()
+    async def shard(self, interaction: discord.Interaction, hide: bool = True):
+        """View shards info of today.
+
+        Parameters
+        ----------
+        interaction : discord.Interaction
+        hide : bool, optional
+            Only you can see the message, by default True.
+        """
         now = sky_time_now()
-        when = now + timedelta(days=offset)
+        embed = self.get_shard_event_embed(now)
+        await interaction.response.send_message(embed=embed, ephemeral=hide)
+
+    @group_shards.command(name="offset")
+    async def shard_offset(
+        self,
+        interaction: discord.Interaction,
+        days: int,
+        hide: bool = True,
+    ):
+        """View shards info relative to today.
+
+        Parameters
+        ----------
+        interaction : discord.Interaction
+        days : int
+            How many days to offset, can be negative.
+        hide : bool, optional
+            Only you can see the message, by default True.
+        """
+        now = sky_time_now()
+        when = now + timedelta(days=days)
         embed = self.get_shard_event_embed(when)
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=hide)
 
     @tasks.loop()
     async def update_calendar_msg(self):
@@ -185,7 +217,7 @@ class ShardCalendar(commands.Cog):
         message = self.calendar_message
         if message and await msg_exist_async(message):
             await message.edit(content=self._CALENDAR_MSG_ID, embed=shard_event_embed)
-            print(f"[{sky_time_now()}] Success editting calendar message.")
+            print(f"[{sky_time_now()}] Success editing calendar message.")
             return
         # 查找频道和消息
         channel = self.bot.get_bot_channel()

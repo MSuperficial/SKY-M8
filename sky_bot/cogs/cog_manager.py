@@ -90,3 +90,15 @@ class CogManager(commands.Cog):
         ):
             # 卸载未加载的功能
             await ctx.send(f"`No extension named {ext_name} was loaded.`")
+
+    @commands.command()
+    async def sync(self, ctx: commands.Context):
+        try:
+            synced = await self.bot.tree.sync()
+            await ctx.send(
+                f"Synced {len(synced)} commands globally:\n{', '.join([c.name for c in synced])}"
+            )
+        except Exception as e:
+            msg = f"Error while syncing: {str(e)}"
+            msg = code_block(msg) if msg.find("\n") != -1 else "`" + msg + "`"
+            await ctx.send(msg)
