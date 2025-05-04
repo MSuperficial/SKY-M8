@@ -236,9 +236,10 @@ class ShardCalendar(commands.Cog):
         private : bool, optional
             Only you can see the message, by default True.
         """
+        await interaction.response.defer(ephemeral=private, thinking=True)
         now = sky_time_now()
         embeds = await self.get_shard_event_embeds(now)
-        await interaction.response.send_message(embeds=embeds, ephemeral=private)
+        await interaction.followup.send(embeds=embeds, ephemeral=private)
 
     @group_shard.command(name="offset")
     async def shard_offset(
@@ -257,10 +258,11 @@ class ShardCalendar(commands.Cog):
         private : bool, optional
             Only you can see the message, by default True.
         """
+        await interaction.response.defer(ephemeral=private, thinking=True)
         now = sky_time_now()
         when = now + timedelta(days=days)
         embeds = await self.get_shard_event_embeds(when)
-        await interaction.response.send_message(embeds=embeds, ephemeral=private)
+        await interaction.followup.send(embeds=embeds, ephemeral=private)
 
     @group_shard.command(name="record")
     async def shard_record(
@@ -282,6 +284,7 @@ class ShardCalendar(commands.Cog):
         date : Optional[str], optional
             Date to record in Year/Month/Day format, by default today.
         """
+        await interaction.response.defer(ephemeral=True, thinking=True)
         # 检查日期格式
         if not date:
             date = sky_time_now()
@@ -290,7 +293,7 @@ class ShardCalendar(commands.Cog):
                 date: datetime = datetime.strptime(date, "%Y/%m/%d")
                 date = sky_datetime(date.year, date.month, date.day)
             except Exception:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=await fail("Date format error"),
                     ephemeral=True,
                 )
@@ -298,14 +301,14 @@ class ShardCalendar(commands.Cog):
         info = get_shard_info(date)
         if not info.has_shard:
             # 当日没有碎石事件
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=await fail("It's a no shard day"),
                 ephemeral=True,
             )
             return
         elif info.type == ShardType.Black:
             # 黑石事件没有回忆场景
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=await fail("Black shard doesn't have shard memory"),
                 ephemeral=True,
             )
@@ -322,13 +325,13 @@ class ShardCalendar(commands.Cog):
                 ),
             )
             # 成功记录
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=await success("Successfully recorded"),
                 ephemeral=True,
             )
         except Exception as e:
             # 其他错误
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 embed=await fail("Error while recording", description=str(e)),
                 ephemeral=True,
             )
