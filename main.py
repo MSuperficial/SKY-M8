@@ -5,10 +5,10 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+load_dotenv(override=True)
+
 from sky_bot import SkyBot
 from sky_bot.cogs import CogManager
-
-load_dotenv(override=True)
 
 
 async def main():
