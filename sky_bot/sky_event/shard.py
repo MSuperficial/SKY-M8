@@ -10,6 +10,8 @@ __all__ = (
     "ShardTime",
     "ShardInfo",
     "get_shard_info",
+    "MemoryType",
+    "ShardExtra",
 )
 
 LAND_OFFSET = timedelta(minutes=8, seconds=40)
@@ -145,3 +147,39 @@ def get_shard_info(when: datetime):
         has_shard=has_shard,
         extra_shard=extra_shard,
     )
+
+
+class MemoryType(Enum):
+    Jelly = 1
+    Crab = 2
+    Manta = 3
+    Krill = 4
+    Whale = 5
+    Elder = 6
+
+
+class ShardExtra(NamedTuple):
+    has_memory: bool
+    memory_type: MemoryType
+    memory_user: int
+    memory_by: str
+    memory_timestamp: float
+
+    @classmethod
+    def from_dict(cls, value: dict):
+        return ShardExtra(
+            has_memory=True if value["hasMemory"] == "true" else False,
+            memory_type=MemoryType(int(value["memoryType"])),
+            memory_user=int(value["memoryUser"]),
+            memory_by=value["memoryBy"],
+            memory_timestamp=float(value["memoryTimestamp"]),
+        )
+
+    def to_dict(self):
+        return {
+            "hasMemory": str(self.has_memory).lower(),
+            "memoryType": str(self.memory_type.value),
+            "memoryUser": str(self.memory_user),
+            "memoryBy": self.memory_by,
+            "memoryTimestamp": str(self.memory_timestamp),
+        }

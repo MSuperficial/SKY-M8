@@ -1,15 +1,24 @@
 import json
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 from discord.utils import format_dt as timestamp
 
+from ..embed_template import fail, success
+from ..remote_config import remote_config
 from ..sky_bot import SkyBot
-from ..sky_event.shard import ShardInfo, ShardType, get_shard_info
-from ..utils import code_block, msg_exist_async, sky_time, sky_time_now
+from ..sky_event.shard import (
+    MemoryType,
+    ShardExtra,
+    ShardInfo,
+    ShardType,
+    get_shard_info,
+)
+from ..utils import code_block, msg_exist_async, sky_datetime, sky_time, sky_time_now
 from .daily_clock import DailyClock
 
 __all__ = ("ShardCalendar",)
@@ -125,12 +134,16 @@ class ShardCalendar(commands.Cog):
             msg = msg.replace("Daily Clock", f"[Daily Clock](<{clock_msg.jump_url}>)")
         return msg
 
-    def get_shard_event_embed(self, when: datetime, now=None):
+    def _extra_key(self, date: datetime):
+        return f"shard.extra.{date:%Y%m%d}"
+
+    async def get_shard_event_embeds(self, when: datetime, now=None):
+        embeds: list[discord.Embed] = []
         info = get_shard_info(when)
         emojis = self._config("emojis")
         graph = self._config("infographics")
         if info.has_shard:
-            embed = (
+            basic_embed = (
                 discord.Embed(
                     color=self._embed_color(info),
                     description=f"-# Shard Calendar - {self._date_field(info)}\n## {self._type_field(info)}",
@@ -138,6 +151,7 @@ class ShardCalendar(commands.Cog):
                 .add_field(
                     name=emojis.get("Map") + " " + "__Map__",
                     value=self._map_field(info),
+                    inline=True,
                 )
                 .add_field(
                     name=emojis.get("Timeline") + " " + "__Timeline__",
@@ -151,8 +165,11 @@ class ShardCalendar(commands.Cog):
                 )
                 .set_image(url=graph.get(".".join([info.realm, info.map])))
             )
+            embeds.append(basic_embed)
+            extra_key = self._extra_key(when)
+            await self._add_memory_info(embeds, info, extra_key)
         else:
-            embed = (
+            basic_embed = (
                 discord.Embed(
                     color=discord.Color.from_str("#DAA520"),
                     description=f"-# Shard Calendar - {timestamp(info.date, 'D')}\n## ☀️ No Shard Day",
@@ -163,7 +180,43 @@ class ShardCalendar(commands.Cog):
                 )
                 .set_image(url=graph.get("noshard"))
             )
-        return embed
+            embeds.append(basic_embed)
+        return embeds
+
+    async def _add_memory_info(self, embeds: list[discord.Embed], info: ShardInfo, key):
+        emojis = self._config("emojis")
+        graph = self._config("infographics")
+        basic_embed = embeds[0]
+        if info.type == ShardType.Red:
+            # 显示Shard Memory信息
+            extra = await remote_config.get_obj(ShardExtra, key)
+            memory_available = extra and extra.has_memory
+            memory_name = (
+                extra.memory_type.name if memory_available else "*Unknown yet*"
+            )
+            basic_embed.insert_field_at(
+                1,
+                name=emojis.get("Crystal") + " " + "__Memory__",
+                value=memory_name,
+                inline=True,
+            )
+            # 显示Shard Memory图片
+            if memory_available:
+                memory_embed = discord.Embed(
+                    color=self._embed_color(info),
+                    title=f"Shard Memory [{memory_name}]",
+                ).set_image(url=graph.get(f"memory.{extra.memory_type.value}"))
+                # 展示提交者信息
+                author = self.bot.get_user(extra.memory_user)
+                if author:
+                    memory_embed.set_footer(
+                        text=f"Submitted by {extra.memory_by.strip() or author.display_name}",
+                        icon_url=author.display_avatar.url,
+                    )
+                    memory_embed.timestamp = datetime.fromtimestamp(
+                        extra.memory_timestamp
+                    )
+                embeds.append(memory_embed)
 
     def set_update_time(self):
         # 设置在今天所有碎片的降落和结束时间更新
@@ -183,8 +236,8 @@ class ShardCalendar(commands.Cog):
             Only you can see the message, by default True.
         """
         now = sky_time_now()
-        embed = self.get_shard_event_embed(now)
-        await interaction.response.send_message(embed=embed, ephemeral=hide)
+        embeds = await self.get_shard_event_embeds(now)
+        await interaction.response.send_message(embeds=embeds, ephemeral=hide)
 
     @group_shards.command(name="offset")
     async def shard_offset(
@@ -205,18 +258,89 @@ class ShardCalendar(commands.Cog):
         """
         now = sky_time_now()
         when = now + timedelta(days=days)
-        embed = self.get_shard_event_embed(when)
-        await interaction.response.send_message(embed=embed, ephemeral=hide)
+        embeds = await self.get_shard_event_embeds(when)
+        await interaction.response.send_message(embeds=embeds, ephemeral=hide)
+
+    @group_shards.command(name="record")
+    async def shard_record(
+        self,
+        interaction: discord.Interaction,
+        memory: MemoryType,
+        author: Optional[str] = "",
+        date: Optional[str] = None,
+    ):
+        """Record shards information of a specific date.
+
+        Parameters
+        ----------
+        interaction : discord.Interaction
+        memory : MemoryType
+            Shard memory of the day.
+        author : Optional[str], optional
+            Change your name for credit, optional.
+        date : Optional[str], optional
+            Date to record in Year/Month/Day format, by default today.
+        """
+        # 检查日期格式
+        if not date:
+            date = sky_time_now()
+        else:
+            try:
+                date: datetime = datetime.strptime(date, "%Y/%m/%d")
+                date = sky_datetime(date.year, date.month, date.day)
+            except Exception:
+                await interaction.response.send_message(
+                    embed=await fail("Date format error"),
+                    ephemeral=True,
+                )
+                return
+        info = get_shard_info(date)
+        if not info.has_shard:
+            # 当日没有碎石事件
+            await interaction.response.send_message(
+                embed=await fail("It's a no shard day"),
+                ephemeral=True,
+            )
+            return
+        elif info.type == ShardType.Black:
+            # 黑石事件没有回忆场景
+            await interaction.response.send_message(
+                embed=await fail("Black shard doesn't have shard memory"),
+                ephemeral=True,
+            )
+            return
+        try:
+            await remote_config.set_obj(
+                self._extra_key(date),
+                ShardExtra(
+                    has_memory=True,
+                    memory_type=memory,
+                    memory_user=interaction.user.id,
+                    memory_by=author.strip(),
+                    memory_timestamp=interaction.created_at.timestamp(),
+                ),
+            )
+            # 成功记录
+            await interaction.response.send_message(
+                embed=await success("Successfully recorded"),
+                ephemeral=True,
+            )
+        except Exception as e:
+            # 其他错误
+            await interaction.response.send_message(
+                embed=await fail("Error while recording", description=str(e)),
+                ephemeral=True,
+            )
 
     @tasks.loop()
     async def update_calendar_msg(self):
         # 生成事件信息
         now = sky_time_now()
-        shard_event_embed = self.get_shard_event_embed(now)
+        shard_event_embeds = await self.get_shard_event_embeds(now)
         # 如果已记录消息，则直接更新
         message = self.calendar_message
         if message and await msg_exist_async(message):
-            await message.edit(content=self._CALENDAR_MSG_ID, embed=shard_event_embed)
+            await message.edit(content=self._CALENDAR_MSG_ID, embeds=shard_event_embeds)
             print(f"[{sky_time_now()}] Success editing calendar message.")
             return
         # 查找频道和消息
@@ -225,11 +349,11 @@ class ShardCalendar(commands.Cog):
         # 如果消息不存在，则发送新消息；否则编辑现有消息
         if message is None:
             message = await channel.send(
-                content=self._CALENDAR_MSG_ID, embed=shard_event_embed
+                content=self._CALENDAR_MSG_ID, embeds=shard_event_embeds
             )
             print(f"[{sky_time_now()}] Success sending calendar message.")
         else:
-            await message.edit(content=self._CALENDAR_MSG_ID, embed=shard_event_embed)
+            await message.edit(content=self._CALENDAR_MSG_ID, embeds=shard_event_embeds)
             print(f"[{sky_time_now()}] Success editing calendar message.")
         # 记录消息，下次可以直接使用
         self.calendar_message = message
