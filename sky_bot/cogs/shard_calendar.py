@@ -27,8 +27,9 @@ __all__ = ("ShardCalendar",)
 class ShardCalendar(commands.Cog):
     _CONFIG_PATH_ = "extern_config/shard.json"
     _CALENDAR_MSG_ID = "-# ˢʰᵃʳᵈᴱᵛᵉⁿᵗ"
-    group_shards = app_commands.Group(
-        name="shards", description="A group of commands to view and config shards information."
+    group_shard = app_commands.Group(
+        name="shard",
+        description="A group of commands to view and config shards information.",
     )
 
     def __init__(self, bot: SkyBot):
@@ -226,25 +227,25 @@ class ShardCalendar(commands.Cog):
         self.update_calendar_msg.change_interval(time=times)
 
     @app_commands.command()
-    async def shard(self, interaction: discord.Interaction, hide: bool = True):
+    async def shards(self, interaction: discord.Interaction, private: bool = True):
         """View shards info of today.
 
         Parameters
         ----------
         interaction : discord.Interaction
-        hide : bool, optional
+        private : bool, optional
             Only you can see the message, by default True.
         """
         now = sky_time_now()
         embeds = await self.get_shard_event_embeds(now)
-        await interaction.response.send_message(embeds=embeds, ephemeral=hide)
+        await interaction.response.send_message(embeds=embeds, ephemeral=private)
 
-    @group_shards.command(name="offset")
+    @group_shard.command(name="offset")
     async def shard_offset(
         self,
         interaction: discord.Interaction,
         days: int,
-        hide: bool = True,
+        private: bool = True,
     ):
         """View shards info relative to today.
 
@@ -253,15 +254,15 @@ class ShardCalendar(commands.Cog):
         interaction : discord.Interaction
         days : int
             How many days to offset, can be negative.
-        hide : bool, optional
+        private : bool, optional
             Only you can see the message, by default True.
         """
         now = sky_time_now()
         when = now + timedelta(days=days)
         embeds = await self.get_shard_event_embeds(when)
-        await interaction.response.send_message(embeds=embeds, ephemeral=hide)
+        await interaction.response.send_message(embeds=embeds, ephemeral=private)
 
-    @group_shards.command(name="record")
+    @group_shard.command(name="record")
     async def shard_record(
         self,
         interaction: discord.Interaction,
