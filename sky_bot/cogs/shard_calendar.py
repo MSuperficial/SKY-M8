@@ -335,6 +335,8 @@ class ShardCalendar(commands.Cog):
                 embed=await fail("Error while recording", description=str(e)),
                 ephemeral=True,
             )
+            return
+        await self.update_calendar_msg()
 
     @tasks.loop()
     async def update_calendar_msg(self):
