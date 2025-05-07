@@ -197,7 +197,7 @@ class ShardCalendar(commands.Cog):
             )
             basic_embed.insert_field_at(
                 1,
-                name=emojis.get("Crystal") + " " + "__Memory__",
+                name=emojis.get("Memory") + " " + "__Memory__",
                 value=memory_name,
                 inline=True,
             )
@@ -205,7 +205,7 @@ class ShardCalendar(commands.Cog):
             if memory_available:
                 memory_embed = discord.Embed(
                     color=self._embed_color(info),
-                    title=f"Shard Memory [{memory_name}]",
+                    title=f"{emojis.get('Crystal')} Shard Memory [{memory_name}]",
                 ).set_image(url=graph.get(f"memory.{extra.memory_type.value}"))
                 # 展示提交者信息
                 author = self.bot.get_user(extra.memory_user)
