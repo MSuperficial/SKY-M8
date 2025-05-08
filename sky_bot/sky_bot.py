@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+from .cogs.cog_manager import CogManager
 from .utils import get_id_from_env
 
 __all__ = ("SkyBot",)
@@ -18,6 +19,7 @@ class SkyBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         # 加载初始扩展
+        await self.add_cog(CogManager(self))
         for extension in self.initial_extensions:
             extension = "sky_bot.cogs." + extension
             await self.load_extension(extension)

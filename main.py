@@ -7,8 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from sky_bot import SkyBot
-from sky_bot.cogs import CogManager
+from sky_bot.sky_bot import SkyBot
 
 
 async def main():
@@ -33,7 +32,6 @@ async def main():
     )
 
     async with bot:
-        await bot.add_cog(CogManager(bot))
         try:
             await bot.start(token)
         except discord.HTTPException as e:

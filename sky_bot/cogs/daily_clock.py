@@ -7,7 +7,7 @@ from discord.ext import commands, tasks
 from discord.utils import format_dt as timestamp
 
 from ..sky_bot import SkyBot
-from ..sky_event import DailyEvent, daily_event_datas, get_daily_event_time
+from ..sky_event.daily import DailyEvent, daily_event_datas, get_daily_event_time
 from ..sky_event.shard import get_shard_info
 from ..utils import code_block, msg_exist_async, sky_time_now
 
