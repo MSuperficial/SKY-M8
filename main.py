@@ -21,6 +21,7 @@ async def main():
 
     initial_extensions = [
         "greeting",
+        "role_manager",
         "daily_clock",
         "shard_calendar",
     ]
