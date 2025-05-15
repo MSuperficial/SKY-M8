@@ -13,14 +13,8 @@ class RoleManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command()
+    @app_commands.command(description="Setup Autoroles message and send to current channel.")
     async def autoroles(self, interaction: discord.Interaction):
-        """Setup Autoroles message and send to current channel
-
-        Parameters
-        ----------
-        interaction : discord.Interaction
-        """
         embed = Embed(color=discord.Color.blue(), title="Setup Autoroles")
         view = AutoRolesSetupView()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)

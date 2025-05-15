@@ -226,64 +226,46 @@ class ShardCalendar(commands.Cog):
         times = [t.timetz() for st in info.occurrences for t in st[1:]]
         self.update_calendar_msg.change_interval(time=times)
 
-    @app_commands.command()
+    @app_commands.command(description="View shards info of today.")
+    @app_commands.describe(
+        private="Only you can see the message, by default True.",
+    )
     async def shards(self, interaction: discord.Interaction, private: bool = True):
-        """View shards info of today.
-
-        Parameters
-        ----------
-        interaction : discord.Interaction
-        private : bool, optional
-            Only you can see the message, by default True.
-        """
         await interaction.response.defer(ephemeral=private, thinking=True)
         now = sky_time_now()
         embeds = await self.get_shard_event_embeds(now)
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
-    @group_shard.command(name="offset")
+    @group_shard.command(name="offset", description="View shards info relative to today.")
+    @app_commands.describe(
+        days="How many days to offset, can be negative.",
+        private="Only you can see the message, by default True.",
+    )
     async def shard_offset(
         self,
         interaction: discord.Interaction,
         days: int,
         private: bool = True,
     ):
-        """View shards info relative to today.
-
-        Parameters
-        ----------
-        interaction : discord.Interaction
-        days : int
-            How many days to offset, can be negative.
-        private : bool, optional
-            Only you can see the message, by default True.
-        """
         await interaction.response.defer(ephemeral=private, thinking=True)
         now = sky_time_now()
         when = now + timedelta(days=days)
         embeds = await self.get_shard_event_embeds(when)
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
-    @group_shard.command(name="record")
+    @group_shard.command(name="record", description="Record shards information of a specific date.")
+    @app_commands.describe(
+        memory="Shard memory of the day.",
+        author="Change your name for credit, optional.",
+        date="Date to record in Year/Month/Day format, by default today.",
+    )
     async def shard_record(
         self,
         interaction: discord.Interaction,
         memory: MemoryType,
-        author: Optional[str] = "",
-        date: Optional[str] = None,
+        author: str = "",
+        date: str = "",
     ):
-        """Record shards information of a specific date.
-
-        Parameters
-        ----------
-        interaction : discord.Interaction
-        memory : MemoryType
-            Shard memory of the day.
-        author : Optional[str], optional
-            Change your name for credit, optional.
-        date : Optional[str], optional
-            Date to record in Year/Month/Day format, by default today.
-        """
         await interaction.response.defer(ephemeral=True, thinking=True)
         # 检查日期格式
         if not date:
