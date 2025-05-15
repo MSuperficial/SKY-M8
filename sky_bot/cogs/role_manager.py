@@ -3,6 +3,7 @@ import re
 import discord
 from discord import ButtonStyle, Embed, Interaction, TextStyle, app_commands, ui
 from discord.ext import commands
+from discord.utils import find
 
 from ..embed_template import fail, success
 
@@ -28,14 +29,23 @@ class AutoRolesSetupView(ui.View):
 
     class SetTitleModal(EmptyModal, title="Set Autoroles title"):
         text_title = ui.TextInput(label="Title (Optional)", required=False)
+        def __init__(self, *, default: str = "") -> None:
+            self.text_title.default = default
+            super().__init__()
 
     class SetDescriptionModal(EmptyModal, title="Set Autoroles description"):
         text_description = ui.TextInput(
             label="Description (Optional)", style=TextStyle.long, required=False
         )
+        def __init__(self, *, default: str = "") -> None:
+            self.text_description.default = default
+            super().__init__()
 
     class RoleDescriptionModal(EmptyModal, title="Provide role description"):
         description = ui.TextInput(label="Role Description")
+        def __init__(self, *, default: str = "") -> None:
+            self.description.default = default
+            super().__init__()
 
     def __init__(self, *, timeout=600):
         super().__init__(timeout=timeout)
@@ -43,17 +53,24 @@ class AutoRolesSetupView(ui.View):
         self.description: str = ""
         self.roles: list[tuple[discord.Role, str]] = []
 
-    def push(self, role: discord.Role, description: str):
+    def _push(self, role: discord.Role, description: str):
         self.roles.append((role, description))
-        if len(self.roles) == 1:
-            self.remove_last.disabled = False
-            self.done.disabled = False
+        self.edit_role.disabled = False
+        self.remove_role.disabled = False
+        self.done.disabled = False
 
-    def pop(self):
-        self.roles.pop()
-        if len(self.roles) == 0:
-            self.remove_last.disabled = True
-            self.done.disabled = True
+    def _get(self, role: discord.Role):
+        item = find(lambda r: r[1][0] == role, enumerate(self.roles))
+        return item
+
+    def _remove(self, role: discord.Role):
+        item = self._get(role)
+        if item:
+            self.roles.pop(item[0])
+            self.edit_role.disabled = True
+            self.remove_role.disabled = True
+            if len(self.roles) == 0:
+                self.done.disabled = True
 
     def create_embed(self):
         desc = self.description
@@ -64,7 +81,7 @@ class AutoRolesSetupView(ui.View):
 
     @ui.button(label="Set Title", style=ButtonStyle.secondary, row=0)
     async def set_title(self, interaction: Interaction, button: ui.Button):
-        modal = self.SetTitleModal()
+        modal = self.SetTitleModal(default=self.title)
         await interaction.response.send_modal(modal)
         await modal.wait()
         self.title = modal.text_title.value
@@ -72,35 +89,53 @@ class AutoRolesSetupView(ui.View):
 
     @ui.button(label="Set Description", style=ButtonStyle.secondary, row=0)
     async def set_description(self, interaction: Interaction, button: ui.Button):
-        modal = self.SetDescriptionModal()
+        modal = self.SetDescriptionModal(default=self.description)
         await interaction.response.send_modal(modal)
         await modal.wait()
         self.description = modal.text_description.value
         await interaction.edit_original_response(embed=self.create_embed())
 
-    @ui.select(cls=ui.RoleSelect, placeholder="Select a role to add...", row=1)
+    @ui.select(cls=ui.RoleSelect, placeholder="Select a role to add/edit/remove...", row=1)
     async def select_role(self, interaction: Interaction, select: ui.RoleSelect):
         role = select.values[0]
-        if role in [r[0] for r in self.roles]:
-            # 角色重复时发送提示并返回
-            await interaction.response.send_message("Duplicated role!", ephemeral=True)
+        existing_role = find(lambda r: r[0] == role, self.roles)
+        # 如果选中已经存在的角色，则仅启用编辑，移除按钮，以供用户后续操作
+        if existing_role:
+            await interaction.response.defer()
+            self.edit_role.disabled = False
+            self.remove_role.disabled = False
+            await interaction.edit_original_response(view=self)
             return
+        # 如果选中不存在的角色，则弹出窗口设置角色描述，之后启用编辑，移除按钮
         modal = self.RoleDescriptionModal()
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.push(role, modal.description.value)
+        self._push(role, modal.description.value)
         await interaction.edit_original_response(embed=self.create_embed(), view=self)
 
-    @ui.button(label="Remove Last", style=ButtonStyle.danger, disabled=True, row=2)
-    async def remove_last(self, interaction: Interaction, button: ui.Button):
+    @ui.button(label="Edit", style=ButtonStyle.secondary, disabled=True, row=2)
+    async def edit_role(self, interaction: Interaction, button: ui.Button):
+        """Edit selected role description."""
+        role = self.select_role.values[0]
+        index, (_, desc) = self._get(role) # type: ignore
+        modal = self.RoleDescriptionModal(default=desc)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        self.roles[index] = (role, modal.description.value)
+        await interaction.edit_original_response(embed=self.create_embed())
+
+    @ui.button(label="Remove", style=ButtonStyle.danger, disabled=True, row=2)
+    async def remove_role(self, interaction: Interaction, button: ui.Button):
+        """Remove selected role."""
         await interaction.response.defer()
-        self.pop()
+        role = self.select_role.values[0]
+        self._remove(role)
         await interaction.edit_original_response(embed=self.create_embed(), view=self)
 
     @ui.button(label="Done", style=ButtonStyle.success, disabled=True, row=2)
     async def done(self, interaction: Interaction, button: ui.Button):
         await interaction.response.defer()
-        # 使用channel.send发送新消息（不显示回复配置消息）
+        # 使用channel.send发送新消息（新消息不会回复配置消息）
         await interaction.channel.send(
             embed=self.create_embed(),
             view=AutoRolesView([r[0] for r in self.roles]),  # 传入配置好的角色列表
