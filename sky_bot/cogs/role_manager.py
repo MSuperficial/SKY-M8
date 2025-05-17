@@ -1,9 +1,17 @@
 import re
 
 import discord
-from discord import ButtonStyle, Embed, Interaction, TextStyle, app_commands, ui
+from discord import (
+    ButtonStyle,
+    Embed,
+    Interaction,
+    Message,
+    TextStyle,
+    app_commands,
+    ui,
+)
 from discord.ext import commands
-from discord.utils import find
+from discord.utils import MISSING, find
 
 from ..embed_template import fail, success
 
@@ -11,14 +19,53 @@ __all__ = ("RoleManager",)
 
 
 class RoleManager(commands.Cog):
+    group_autoroles = app_commands.Group(
+        name="autoroles",
+        description="Commands for Autoroles setup and editting.",
+    )
+
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(description="Setup Autoroles message and send to current channel.")
-    async def autoroles(self, interaction: discord.Interaction):
+    @group_autoroles.command(
+        name="setup",
+        description="Setup Autoroles message and send to current channel.",
+    )
+    async def autoroles_setup(self, interaction: discord.Interaction):
         embed = Embed(color=discord.Color.blue(), title="Setup Autoroles")
         view = AutoRolesSetupView()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    class MessageTranformer(app_commands.Transformer):
+        async def transform(self, interaction: Interaction, value: str):
+            converter = commands.MessageConverter()
+            try:
+                message = await converter.convert(
+                    await commands.Context.from_interaction(interaction), value
+                )
+                return message
+            except commands.BadArgument:
+                return None
+
+    @group_autoroles.command(
+        name="edit",
+        description="Edit content of previous Autoroles message.",
+    )
+    @app_commands.describe(message="ID or link of the message.")
+    async def autoroles_edit(
+        self,
+        interaction: discord.Interaction,
+        message: app_commands.Transform[Message, MessageTranformer],
+    ):
+        if not message or len(message.embeds) == 0:
+            await interaction.response.send_message(
+                embed=await fail("Invalid message"),
+                ephemeral=True,
+            )
+        await interaction.response.defer(ephemeral=True)
+        view = AutoRolesSetupView.edit_message(message)
+        embed = view.create_embed()
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 class AutoRolesSetupView(ui.View):
@@ -29,6 +76,7 @@ class AutoRolesSetupView(ui.View):
 
     class SetTitleModal(EmptyModal, title="Set Autoroles title"):
         text_title = ui.TextInput(label="Title (Optional)", required=False)
+
         def __init__(self, *, default: str = "") -> None:
             self.text_title.default = default
             super().__init__()
@@ -37,12 +85,14 @@ class AutoRolesSetupView(ui.View):
         text_description = ui.TextInput(
             label="Description (Optional)", style=TextStyle.long, required=False
         )
+
         def __init__(self, *, default: str = "") -> None:
             self.text_description.default = default
             super().__init__()
 
     class RoleDescriptionModal(EmptyModal, title="Provide role description"):
         description = ui.TextInput(label="Role Description")
+
         def __init__(self, *, default: str = "") -> None:
             self.description.default = default
             super().__init__()
@@ -52,6 +102,29 @@ class AutoRolesSetupView(ui.View):
         self.title: str = ""
         self.description: str = ""
         self.roles: list[tuple[discord.Role, str]] = []
+        self._editting: Message = MISSING
+
+    @classmethod
+    def edit_message(cls, message: Message):
+        instance = cls()
+        instance._editting = message
+        embed = message.embeds[0]
+        if embed.title:
+            instance.title = embed.title
+        desc: str = embed.description  # type: ignore
+        if (sep := desc.rfind("\n\n")) != -1:
+            instance.description = desc[:sep]
+            desc = desc[sep + 2 :]
+        lines = [line.split(" - ") for line in desc.splitlines()]
+        lines = [(int(r[0].strip("<@&>")), r[1]) for r in lines]
+        roles: list[tuple[discord.Role, str]] = []
+        for id, description in lines:
+            if role := message.guild.get_role(id):  # type:ignore
+                roles.append((role, description))
+        instance.roles = roles
+        if len(roles) > 0:
+            instance.done.disabled = False
+        return instance
 
     def _push(self, role: discord.Role, description: str):
         self.roles.append((role, description))
@@ -79,6 +152,11 @@ class AutoRolesSetupView(ui.View):
         embed = Embed(color=discord.Color.blue(), title=self.title, description=desc)
         return embed
 
+    def create_view(self):
+        # 传入配置好的角色列表
+        view = AutoRolesView([r[0] for r in self.roles])
+        return view
+
     @ui.button(label="Set Title", style=ButtonStyle.secondary, row=0)
     async def set_title(self, interaction: Interaction, button: ui.Button):
         modal = self.SetTitleModal(default=self.title)
@@ -95,7 +173,7 @@ class AutoRolesSetupView(ui.View):
         self.description = modal.text_description.value
         await interaction.edit_original_response(embed=self.create_embed())
 
-    @ui.select(cls=ui.RoleSelect, placeholder="Select a role to add/edit/remove...", row=1)
+    @ui.select(cls=ui.RoleSelect, placeholder="Select role to add/edit/remove", row=1)
     async def select_role(self, interaction: Interaction, select: ui.RoleSelect):
         role = select.values[0]
         existing_role = find(lambda r: r[0] == role, self.roles)
@@ -117,7 +195,7 @@ class AutoRolesSetupView(ui.View):
     async def edit_role(self, interaction: Interaction, button: ui.Button):
         """Edit selected role description."""
         role = self.select_role.values[0]
-        index, (_, desc) = self._get(role) # type: ignore
+        index, (_, desc) = self._get(role)  # type: ignore
         modal = self.RoleDescriptionModal(default=desc)
         await interaction.response.send_modal(modal)
         await modal.wait()
@@ -135,11 +213,18 @@ class AutoRolesSetupView(ui.View):
     @ui.button(label="Done", style=ButtonStyle.success, disabled=True, row=2)
     async def done(self, interaction: Interaction, button: ui.Button):
         await interaction.response.defer()
-        # 使用channel.send发送新消息（新消息不会回复配置消息）
-        await interaction.channel.send(
-            embed=self.create_embed(),
-            view=AutoRolesView([r[0] for r in self.roles]),  # 传入配置好的角色列表
-        )
+        if self._editting:
+            # 如果有设置消息，则编辑先前的消息
+            await self._editting.edit(
+                embed=self.create_embed(),
+                view=self.create_view(),
+            )
+        else:
+            # 使用channel.send发送新消息（新消息不会回复配置消息）
+            await interaction.channel.send(  # type: ignore
+                embed=self.create_embed(),
+                view=self.create_view(),
+            )
 
 
 class AutoRolesView(ui.View):
