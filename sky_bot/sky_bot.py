@@ -1,4 +1,5 @@
 import discord
+from discord.app_commands import AppCommandContext, AppInstallationType
 from discord.ext import commands
 
 from .cogs.cog_manager import CogManager
@@ -9,7 +10,14 @@ __all__ = ("SkyBot",)
 
 class SkyBot(commands.Bot):
     def __init__(self, *args, initial_extensions: list[str], **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            allowed_installs=AppInstallationType(guild=True, user=True),
+            allowed_contexts=AppCommandContext(
+                guild=True, dm_channel=True, private_channel=True
+            ),
+            *args,
+            **kwargs,
+        )
         self.initial_extensions = initial_extensions
         # 获取ID
         self.guild_id = get_id_from_env("GUILD_ID")

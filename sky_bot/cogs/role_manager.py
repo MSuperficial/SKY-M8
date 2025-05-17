@@ -22,6 +22,8 @@ class RoleManager(commands.Cog):
     group_autoroles = app_commands.Group(
         name="autoroles",
         description="Commands for Autoroles setup and editting.",
+        allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
+        allowed_installs=app_commands.AppInstallationType(user=False),
     )
 
     def __init__(self, bot):
