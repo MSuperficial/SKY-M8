@@ -1,12 +1,10 @@
 import json
 import os
 from datetime import datetime, timedelta
-from typing import Optional
 
 import discord
 from discord import Interaction, app_commands
 from discord.ext import commands, tasks
-from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
 from ..embed_template import fail, success
@@ -238,6 +236,29 @@ class ShardCalendar(commands.Cog):
         embeds = await self.get_shard_event_embeds(now)
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
+    @group_shard.command(name="date", description="View shards info of specific date.")
+    @app_commands.describe(
+        date="Date to view in Year/Month/Day format.",
+        private="Only you can see the message, by default True.",
+    )
+    @app_commands.autocomplete(date=date_autocomplete)
+    async def shard_date(
+        self,
+        interaction: Interaction,
+        date: app_commands.Transform[datetime, DateTransformer],
+        private: bool = True,
+    ):
+        await interaction.response.defer(ephemeral=private, thinking=True)
+        # 日期格式错误
+        if not date:
+            await interaction.followup.send(
+                embed=await fail("Date format error"),
+                ephemeral=private,
+            )
+            return
+        embeds = await self.get_shard_event_embeds(date)
+        await interaction.followup.send(embeds=embeds, ephemeral=private)
+
     @group_shard.command(
         name="offset", description="View shards info relative to today."
     )
@@ -258,7 +279,7 @@ class ShardCalendar(commands.Cog):
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
     @group_shard.command(
-        name="record", description="Record shards information of a specific date."
+        name="record", description="Record shards info of a specific date."
     )
     @app_commands.describe(
         memory="Shard memory of the day.",
