@@ -1,10 +1,12 @@
+import calendar
 import json
 import os
+import re
 from datetime import datetime, timedelta
-from typing import Optional
 
 import discord
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands, tasks
 from discord.utils import format_dt as timestamp
 
@@ -236,7 +238,9 @@ class ShardCalendar(commands.Cog):
         embeds = await self.get_shard_event_embeds(now)
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
-    @group_shard.command(name="offset", description="View shards info relative to today.")
+    @group_shard.command(
+        name="offset", description="View shards info relative to today."
+    )
     @app_commands.describe(
         days="How many days to offset, can be negative.",
         private="Only you can see the message, by default True.",
@@ -253,12 +257,53 @@ class ShardCalendar(commands.Cog):
         embeds = await self.get_shard_event_embeds(when)
         await interaction.followup.send(embeds=embeds, ephemeral=private)
 
-    @group_shard.command(name="record", description="Record shards information of a specific date.")
+    async def _date_autocomplete(self, interaction: discord.Interaction, value: str):
+        def is_int(s: str):
+            try:
+                _ = int(s)
+                return True
+            except ValueError:
+                return False
+
+        value = value.strip()
+        results = []
+        if not value:
+            # 空字符串
+            now = datetime.now()
+            # 先从今年到2022，再从明年往后直到填满25个
+            years = list(range(now.year, 2021, -1))
+            years.extend([y + now.year + 1 for y in range(25 - len(years))])
+            results = [str(y) + "/" for y in years]
+        elif value.endswith("/") and is_int(value[:-1]):
+            # year/
+            months = list(range(1, 13))
+            results = [value + str(m) + "/" for m in months]
+        elif match := re.match(r"([0-9]+)/([0-9]{1,2})/$", value):
+            # year/month/
+            y, m = [int(g) for g in match.groups()]
+            if 1 <= m and m <= 12:
+                days = list(range(1, 10))
+                results = [value + str(d) for d in days]
+        elif match := re.match(r"([0-9]+)/([0-9]{1,2})/([1-3])$", value):
+            # year/month/day
+            y, m, d = [int(g) for g in match.groups()]
+            if 1 <= m and m <= 12:
+                day_range = calendar.monthrange(y, m)[1]
+                days = range(1, day_range + 1)
+                days = [d_ for d_ in days if d_ // 10 == d]
+                results = [value[:-1] + str(d) for d in days]
+        choices = [Choice(name=r, value=r) for r in results]
+        return choices
+
+    @group_shard.command(
+        name="record", description="Record shards information of a specific date."
+    )
     @app_commands.describe(
         memory="Shard memory of the day.",
         author="Change your name for credit, optional.",
         date="Date to record in Year/Month/Day format, by default today.",
     )
+    @app_commands.autocomplete(date=_date_autocomplete)
     async def shard_record(
         self,
         interaction: discord.Interaction,
