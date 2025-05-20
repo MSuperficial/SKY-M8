@@ -13,6 +13,7 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
+from ._helper import MessageTranformer
 from ..embed_template import fail, success
 
 __all__ = ("RoleManager",)
@@ -37,17 +38,6 @@ class RoleManager(commands.Cog):
         embed = Embed(color=discord.Color.blue(), title="Setup Autoroles")
         view = AutoRolesSetupView()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-    class MessageTranformer(app_commands.Transformer):
-        async def transform(self, interaction: Interaction, value: str):
-            converter = commands.MessageConverter()
-            try:
-                message = await converter.convert(
-                    await commands.Context.from_interaction(interaction), value
-                )
-                return message
-            except commands.BadArgument:
-                return None
 
     @group_autoroles.command(
         name="edit",
