@@ -1,18 +1,20 @@
 import calendar
-from datetime import datetime
 import re
+from datetime import datetime
 
 from discord import Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
+from ..utils import sky_datetime, sky_time_now
+
 __all__ = (
-    "MessageTranformer",
+    "MessageTransformer",
     "date_autocomplete",
 )
 
 
-class MessageTranformer(app_commands.Transformer):
+class MessageTransformer(app_commands.Transformer):
     async def transform(self, interaction: Interaction, value: str):
         converter = commands.MessageConverter()
         try:
@@ -21,6 +23,18 @@ class MessageTranformer(app_commands.Transformer):
             )
             return message
         except commands.BadArgument:
+            return None
+
+
+class DateTransformer(app_commands.Transformer):
+    async def transform(self, interaction: Interaction, value: str):
+        if not value:
+            return sky_time_now()
+        try:
+            date = datetime.strptime(value, "%Y/%m/%d")
+            date = sky_datetime(date.year, date.month, date.day)
+            return date
+        except Exception:
             return None
 
 

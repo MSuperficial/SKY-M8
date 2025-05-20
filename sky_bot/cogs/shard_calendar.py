@@ -1,16 +1,14 @@
-import calendar
 import json
 import os
-import re
 from datetime import datetime, timedelta
+from typing import Optional
 
 import discord
-from discord import app_commands, Interaction
-from discord.app_commands import Choice
+from discord import Interaction, app_commands
 from discord.ext import commands, tasks
+from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
-from ._helper import date_autocomplete
 from ..embed_template import fail, success
 from ..remote_config import remote_config
 from ..sky_bot import SkyBot
@@ -21,7 +19,8 @@ from ..sky_event.shard import (
     ShardType,
     get_shard_info,
 )
-from ..utils import code_block, msg_exist_async, sky_datetime, sky_time, sky_time_now
+from ..utils import code_block, msg_exist_async, sky_time, sky_time_now
+from ._helper import DateTransformer, date_autocomplete
 from .daily_clock import DailyClock
 
 __all__ = ("ShardCalendar",)
@@ -275,20 +274,16 @@ class ShardCalendar(commands.Cog):
         date: str = "",
     ):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        # 检查日期格式
-        if not date:
-            date = sky_time_now()
-        else:
-            try:
-                date: datetime = datetime.strptime(date, "%Y/%m/%d")
-                date = sky_datetime(date.year, date.month, date.day)
-            except Exception:
-                await interaction.followup.send(
-                    embed=await fail("Date format error"),
-                    ephemeral=True,
-                )
-                return
-        info = get_shard_info(date)
+        tsfm = DateTransformer()
+        date_ = await tsfm.transform(interaction, date)
+        # 日期格式错误
+        if not date_:
+            await interaction.followup.send(
+                embed=await fail("Date format error"),
+                ephemeral=True,
+            )
+            return
+        info = get_shard_info(date_)
         if not info.has_shard:
             # 当日没有碎石事件
             await interaction.followup.send(
@@ -305,7 +300,7 @@ class ShardCalendar(commands.Cog):
             return
         try:
             await remote_config.set_obj(
-                self._extra_key(date),
+                self._extra_key(date_),
                 ShardExtra(
                     has_memory=True,
                     memory_type=memory,

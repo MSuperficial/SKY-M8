@@ -13,7 +13,7 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
-from ._helper import MessageTranformer
+from ._helper import MessageTransformer
 from ..embed_template import fail, success
 
 __all__ = ("RoleManager",)
@@ -47,7 +47,7 @@ class RoleManager(commands.Cog):
     async def autoroles_edit(
         self,
         interaction: discord.Interaction,
-        message: app_commands.Transform[Message, MessageTranformer],
+        message: app_commands.Transform[Message, MessageTransformer],
     ):
         if not message or len(message.embeds) == 0:
             await interaction.response.send_message(
