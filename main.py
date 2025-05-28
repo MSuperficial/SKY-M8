@@ -9,6 +9,10 @@ load_dotenv(override=True)
 
 from sky_bot.sky_bot import SkyBot
 
+if os.name == "nt":
+    policy = asyncio.WindowsSelectorEventLoopPolicy()
+    asyncio.set_event_loop_policy(policy)
+
 
 async def main():
     token = os.getenv("SKYBOT_TOKEN")
@@ -30,6 +34,7 @@ async def main():
         commands.when_mentioned_or("!"),
         initial_extensions=initial_extensions,
         intents=intents,
+        proxy=os.getenv("PROXY"),
     )
 
     async with bot:
