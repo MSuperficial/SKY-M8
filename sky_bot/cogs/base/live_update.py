@@ -23,7 +23,8 @@ class LiveUpdateCog(commands.Cog):
     group_live = app_commands.Group(
         name="live",
         description="Commands to manage live message.",
-        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
+        allowed_installs=app_commands.AppInstallationType(user=False),
     )
 
     def __init_subclass__(
