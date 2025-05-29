@@ -6,7 +6,7 @@ from typing import Literal
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
-from discord.ext import commands, tasks
+from discord.ext import tasks
 from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
@@ -20,9 +20,9 @@ from ..sky_event.shard import (
     ShardType,
     get_shard_info,
 )
-from ..utils import code_block, msg_exist_async, sky_datetime, sky_time, sky_time_now
+from ..utils import sky_datetime, sky_time, sky_time_now
 from ._helper import DateTransformer, date_autocomplete
-from .daily_clock import DailyClock
+from .base.live_update import LiveUpdateCog
 
 __all__ = ("ShardCalendar",)
 
@@ -53,30 +53,53 @@ def shard_extra_key(date: datetime):
     return f"shard.extra.{date:%Y%m%d}"
 
 
-class ShardCalendar(commands.Cog):
-    _CALENDAR_MSG_ID = "-# ˢʰᵃʳᵈᴱᵛᵉⁿᵗ"
+class ShardCalendar(
+    LiveUpdateCog,
+    live_key="shardCalendar.webhooks",
+    group_live_name="shard-live",
+    live_display_name="Shard Calendar",
+):
     group_shard = app_commands.Group(
         name="shard",
         description="A group of commands to view and config shards information.",
     )
 
     def __init__(self, bot: SkyBot):
-        self.bot = bot
-        self.calendar_message: discord.Message = MISSING
+        super().__init__(bot)
+
+    async def cog_load(self):
+        await super().cog_load()
         # 设置更新时间
         self.set_update_time()
-        self.update_calendar_msg.start()
         self.refresh_calendar_state.start()
 
     async def cog_unload(self):
-        self.update_calendar_msg.cancel()
+        await super().cog_unload()
+        self.refresh_calendar_state.cancel()
 
     def set_update_time(self):
         # 设置在今天所有碎片的降落和结束时间更新
         now = sky_time_now()
         info = get_shard_info(now)
         times = [t.timetz() for st in info.occurrences for t in st[1:]]
-        self.update_calendar_msg.change_interval(time=times)
+        self.update_live_msg.change_interval(time=times)
+
+    async def get_live_message_data(
+        self,
+        *,
+        date: datetime = MISSING,
+        persistent: bool = True,
+        **kwargs,
+    ):
+        date = date or sky_time_now()
+        builder = ShardEmbedBuilder(self.bot)
+        embeds = await builder.build_embed(date)
+        # 实时消息不显示跳转今天按钮，且设置为持久化
+        view = ShardNavView(date, show_today=not persistent, persistent=persistent)
+        return {
+            "embeds": embeds,
+            "view": view,
+        }
 
     @app_commands.command(description="View shards info of today.")
     @app_commands.describe(
@@ -84,11 +107,8 @@ class ShardCalendar(commands.Cog):
     )
     async def shards(self, interaction: Interaction, private: bool = True):
         await interaction.response.defer(ephemeral=private, thinking=True)
-        date = sky_time_now()
-        builder = ShardEmbedBuilder(self.bot)
-        embeds = await builder.build_embed(date)
-        view = ShardNavView(date)
-        await interaction.followup.send(embeds=embeds, view=view, ephemeral=private)
+        msg_data = await self.get_live_message_data(persistent=False)
+        await interaction.followup.send(**msg_data, ephemeral=private)
 
     @group_shard.command(name="date", description="View shards info of specific date.")
     @app_commands.describe(
@@ -110,14 +130,10 @@ class ShardCalendar(commands.Cog):
                 ephemeral=private,
             )
             return
-        builder = ShardEmbedBuilder(self.bot)
-        embeds = await builder.build_embed(date)
-        view = ShardNavView(date)
-        await interaction.followup.send(embeds=embeds, view=view, ephemeral=private)
+        msg_data = await self.get_live_message_data(date=date, persistent=False)
+        await interaction.followup.send(**msg_data, ephemeral=private)
 
-    @group_shard.command(
-        name="offset", description="View shards info relative to today."
-    )
+    @group_shard.command(name="offset", description="View shards info relative to today.")  # fmt: skip
     @app_commands.describe(
         days="How many days to offset, can be negative.",
         private="Only you can see the message, by default True.",
@@ -131,14 +147,10 @@ class ShardCalendar(commands.Cog):
         await interaction.response.defer(ephemeral=private, thinking=True)
         now = sky_time_now()
         date = now + timedelta(days=days)
-        builder = ShardEmbedBuilder(self.bot)
-        embeds = await builder.build_embed(date)
-        view = ShardNavView(date)
-        await interaction.followup.send(embeds=embeds, view=view, ephemeral=private)
+        msg_data = await self.get_live_message_data(date=date, persistent=False)
+        await interaction.followup.send(**msg_data, ephemeral=private)
 
-    @group_shard.command(
-        name="record", description="Record shards info of a specific date."
-    )
+    @group_shard.command(name="record", description="Record shards info of a specific date.")  # fmt: skip
     @app_commands.describe(
         memory="Shard memory of the day.",
         author="Change your name for credit, optional.",
@@ -200,63 +212,20 @@ class ShardCalendar(commands.Cog):
                 ephemeral=True,
             )
             return
-        await self.update_calendar_msg()
+        # 记录回忆后更新所有live消息
+        await self.update_live_msg()
 
-    @tasks.loop()
-    async def update_calendar_msg(self):
-        # 生成事件信息
-        now = sky_time_now()
-        builder = ShardEmbedBuilder(self.bot)
-        embeds = await builder.build_embed(now)
-        # 实时消息不显示跳转今天按钮，且设置为持久化
-        view = ShardNavView(now, show_today=False, persistent=True)
-        # 如果已记录消息，则直接更新
-        message = self.calendar_message
-        if message and await msg_exist_async(message):
-            await message.edit(content=self._CALENDAR_MSG_ID, embeds=embeds, view=view)
-            print(f"[{sky_time_now()}] Success editing calendar message.")
-            return
-        # 查找频道和消息
-        channel: discord.TextChannel = self.bot.get_bot_channel()  # type: ignore
-        message = await self.bot.search_message_async(channel, self._CALENDAR_MSG_ID)
-        # 如果消息不存在，则发送新消息；否则编辑现有消息
-        if message is None:
-            message = await channel.send(
-                content=self._CALENDAR_MSG_ID, embeds=embeds, view=view
-            )
-            print(f"[{sky_time_now()}] Success sending calendar message.")
-        else:
-            await message.edit(content=self._CALENDAR_MSG_ID, embeds=embeds, view=view)
-            print(f"[{sky_time_now()}] Success editing calendar message.")
-        # 记录消息，下次可以直接使用
-        self.calendar_message = message
-
-    @update_calendar_msg.before_loop
-    async def setup_update_calendar_msg(self):
+    async def get_ready_for_live(self):
         # 设置更新时间
         self.set_update_time()
-        # 等待客户端就绪
-        await self.bot.wait_until_ready()
-        # 先更新一次
-        await self.update_calendar_msg()
-
-    @update_calendar_msg.error
-    async def calendar_error(self, error):
-        task_name = self.update_calendar_msg.coro.__name__
-        error_msg = (
-            f"Error during task `{task_name}`: `{type(error).__name__}`\n"
-            f"{code_block(error)}"
-        )
-        print(error_msg)
-        await self.bot.owner.send(error_msg)
 
     @tasks.loop(time=sky_time(0, 0))
     async def refresh_calendar_state(self):
         # 每天刚开始时刷新一次碎片消息
-        await self.update_calendar_msg()
+        await self.update_live_msg()
         # 然后修改碎片消息的更新时间
         self.set_update_time()
-        print(f"[{sky_time_now()}] Calendar state updated.")
+        print(f"[{sky_time_now()}] Sky Calendar state updated.")
 
 
 class ShardEmbedBuilder:
@@ -331,18 +300,6 @@ class ShardEmbedBuilder:
         days_symbol = [_symbol(info.date + timedelta(days=i + 1)) for i in range(days)]
         field = " ".join(days_symbol)
         return field
-
-    def _extra_msg(self, info: ShardInfo):
-        # 额外碎片信息
-        if not info.extra_shard:
-            # 不存在额外碎片就返回空字符串
-            return ""
-        msg = "- ☄️ **Extra shard day! See Daily Clock.**"
-        # 链接到日常事件时刻消息以提供细节
-        daily_cog: DailyClock = self.bot.get_cog(DailyClock.__name__)  # type: ignore
-        if clock_msg := daily_cog.clock_message:
-            msg = msg.replace("Daily Clock", f"[Daily Clock](<{clock_msg.jump_url}>)")
-        return msg
 
     async def build_embed(self, date: datetime, now=None):
         embeds: list[discord.Embed] = []
@@ -428,7 +385,11 @@ class ShardEmbedBuilder:
 
 class ShardNavView(ui.View):
     def __init__(
-        self, date: datetime, *, show_today: bool = True, persistent: bool = False
+        self,
+        date: datetime,
+        *,
+        show_today: bool = True,
+        persistent: bool = False,
     ):
         # persistent 除了影响UI是否持久化，还会影响按钮交互的回复方式
         super().__init__(timeout=None if persistent else 900)

@@ -10,6 +10,7 @@ from ..utils import sky_datetime, sky_time_now
 
 __all__ = (
     "MessageTransformer",
+    "DateTransformer",
     "date_autocomplete",
 )
 

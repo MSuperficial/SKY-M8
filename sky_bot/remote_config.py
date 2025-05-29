@@ -20,6 +20,21 @@ class RemoteConfig:
     async def set_field(self, key, field, value):
         return await self.redis.hset(key, field, value)
 
+    async def get_list(self, key):
+        return await self.redis.lrange(key, 0, -1)
+
+    async def set_list(self, key, value):
+        if not value:
+            await self.redis.delete(key)
+        else:
+            pipeline = self.redis.multi()
+            pipeline.delete(key)
+            pipeline.rpush(key, *value)
+            await pipeline.exec()
+
+    async def append_list(self, key, *values):
+        await self.redis.rpush(key, *values)
+
     async def get_dict(self, key):
         return await self.redis.hgetall(key)
 
