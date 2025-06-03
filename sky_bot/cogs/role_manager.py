@@ -13,8 +13,8 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
-from ._helper import MessageTransformer
 from ..embed_template import fail, success
+from .helper.common import MessageTransformer
 
 __all__ = ("RoleManager",)
 
