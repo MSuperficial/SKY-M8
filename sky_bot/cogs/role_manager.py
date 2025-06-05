@@ -6,7 +6,6 @@ from discord import (
     Embed,
     Interaction,
     Message,
-    TextStyle,
     app_commands,
     ui,
 )
@@ -14,6 +13,7 @@ from discord.ext import commands
 from discord.utils import MISSING, find
 
 from ..embed_template import fail, success
+from .base.views import LongTextModal, ShortTextModal
 from .helper.common import MessageTransformer
 
 __all__ = ("RoleManager",)
@@ -61,34 +61,6 @@ class RoleManager(commands.Cog):
 
 
 class AutoRolesSetupView(ui.View):
-    class EmptyModal(ui.Modal):
-        async def on_submit(self, interaction: Interaction):
-            # 默认什么都不做，使用时通过对象实例取回文本框的内容
-            await interaction.response.defer()
-
-    class SetTitleModal(EmptyModal, title="Set Autoroles title"):
-        text_title = ui.TextInput(label="Title (Optional)", required=False)
-
-        def __init__(self, *, default: str = "") -> None:
-            self.text_title.default = default
-            super().__init__()
-
-    class SetDescriptionModal(EmptyModal, title="Set Autoroles description"):
-        text_description = ui.TextInput(
-            label="Description (Optional)", style=TextStyle.long, required=False
-        )
-
-        def __init__(self, *, default: str = "") -> None:
-            self.text_description.default = default
-            super().__init__()
-
-    class RoleDescriptionModal(EmptyModal, title="Provide role description"):
-        description = ui.TextInput(label="Role Description")
-
-        def __init__(self, *, default: str = "") -> None:
-            self.description.default = default
-            super().__init__()
-
     def __init__(self, *, timeout=600):
         super().__init__(timeout=timeout)
         self.title: str = ""
@@ -151,25 +123,35 @@ class AutoRolesSetupView(ui.View):
 
     @ui.button(label="Set Title", style=ButtonStyle.secondary, row=0)
     async def set_title(self, interaction: Interaction, button: ui.Button):
-        modal = self.SetTitleModal(default=self.title)
+        modal = ShortTextModal(
+            title="Set Autoroles title",
+            label="Title (Optional)",
+            default=self.title,
+            required=False,
+        )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.title = modal.text_title.value
+        self.title = modal.text.value
         await interaction.edit_original_response(embed=self.create_embed())
 
     @ui.button(label="Set Description", style=ButtonStyle.secondary, row=0)
     async def set_description(self, interaction: Interaction, button: ui.Button):
-        modal = self.SetDescriptionModal(default=self.description)
+        modal = LongTextModal(
+            title="Set Autoroles description",
+            label="Description (Optional)",
+            default=self.description,
+            required=False,
+        )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.description = modal.text_description.value
+        self.description = modal.text.value
         await interaction.edit_original_response(embed=self.create_embed())
 
     @ui.select(cls=ui.RoleSelect, placeholder="Select role to add/edit/remove", row=1)
     async def select_role(self, interaction: Interaction, select: ui.RoleSelect):
         role = select.values[0]
         existing_role = find(lambda r: r[0] == role, self.roles)
-        # 如果选中已经存在的角色，则仅启用编辑，移除按钮，以供用户后续操作
+        # 如果选中已经存在的角色，则仅启用编辑、移除按钮，以供用户后续操作
         if existing_role:
             await interaction.response.defer()
             self.edit_role.disabled = False
@@ -177,10 +159,13 @@ class AutoRolesSetupView(ui.View):
             await interaction.edit_original_response(view=self)
             return
         # 如果选中不存在的角色，则弹出窗口设置角色描述，之后启用编辑，移除按钮
-        modal = self.RoleDescriptionModal()
+        modal = ShortTextModal(
+            title="Provide role description",
+            label="Role Description",
+        )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self._push(role, modal.description.value)
+        self._push(role, modal.text.value)
         await interaction.edit_original_response(embed=self.create_embed(), view=self)
 
     @ui.button(label="Edit", style=ButtonStyle.secondary, disabled=True, row=2)
@@ -188,10 +173,14 @@ class AutoRolesSetupView(ui.View):
         """Edit selected role description."""
         role = self.select_role.values[0]
         index, (_, desc) = self._get(role)  # type: ignore
-        modal = self.RoleDescriptionModal(default=desc)
+        modal = ShortTextModal(
+            title="Provide role description",
+            label="Role Description",
+            default=desc,
+        )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.roles[index] = (role, modal.description.value)
+        self.roles[index] = (role, modal.text.value)
         await interaction.edit_original_response(embed=self.create_embed())
 
     @ui.button(label="Remove", style=ButtonStyle.danger, disabled=True, row=2)
@@ -241,13 +230,13 @@ class AutoRolesView(ui.View):
 
         async def callback(self, interaction: Interaction):
             await interaction.response.defer(ephemeral=True, thinking=True)
-            role = interaction.guild.get_role(self.role_id)
+            role = interaction.guild.get_role(self.role_id)  # type: ignore
             if not role:
                 await interaction.followup.send(
                     embed=await fail(f"Role {self.role_id} does not exist"),
                 )
                 return
-            member = interaction.user
+            member: discord.Member = interaction.user  # type: ignore
             try:
                 # 如果成员已有角色则移除，没有角色则添加
                 if member.get_role(role.id):

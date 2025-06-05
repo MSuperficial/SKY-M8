@@ -1,4 +1,4 @@
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
 from upstash_redis.asyncio import Redis
 
@@ -41,15 +41,43 @@ class RemoteConfig:
     async def set_dict(self, key, value):
         return await self.redis.hmset(key, value)
 
-    async def get_obj(self, type: Type[T], key) -> T:
+    async def get_obj(self, type: Type[T], key) -> T | None:
         value = await self.get_dict(key)
         if not value:
             return None
-        return type.from_dict(value)
+        return type.from_dict(value)  # type: ignore
 
     async def set_obj(self, key, obj: T):
-        value = obj.to_dict()
+        value = obj.to_dict()  # type: ignore
         return await self.set_dict(key, value)
+
+    async def get_json(self, key, *path):
+        path = ".".join(["$"] + [str(p) for p in path])
+        value: list[dict[str, Any]] = await self.redis.json.get(key, path)  # type: ignore
+        if len(value) == 0:
+            return None
+        else:
+            return value[0]
+
+    async def _ensure_path_exist(self, key, *path):
+        if not await self.redis.json.type(key):
+            await self.redis.json.set(key, "$", {})
+        empty = {}
+        for p in reversed(path[:-1]):
+            empty = {str(p): empty}
+        await self.redis.json.merge(key, "$", empty)  # type: ignore
+
+    async def set_json(self, key, *path, value) -> bool:
+        await self._ensure_path_exist(key, *path)
+        path = ".".join(["$"] + [str(p) for p in path])
+        result = await self.redis.json.set(key, path, value)
+        return result
+
+    async def merge_json(self, key, *path, value) -> bool:
+        await self._ensure_path_exist(key, *path)
+        path = ".".join(["$"] + [str(p) for p in path])
+        result = await self.redis.json.merge(key, path, value)
+        return result
 
 
 remote_config = RemoteConfig()
