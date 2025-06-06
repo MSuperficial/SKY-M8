@@ -356,17 +356,19 @@ class WelcomeMessageView(ui.View):
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        if modal.text.value:
+        if color := modal.text.value:
             # 检查颜色格式是否正确
             try:
-                discord.Color.from_str(modal.text.value)
+                if not color.startswith(("#", "0x", "rgb")):
+                    color = "#" + color
+                discord.Color.from_str(color)
             except ValueError:
                 await interaction.followup.send(
                     embed=await fail("Invalid color format"),
                     ephemeral=True,
                 )
                 return
-        self.msg_obj["color"] = modal.text.value
+        self.msg_obj["color"] = color
         await self.update_message(interaction)
 
     @ui.button(label="Image", row=1)
@@ -399,7 +401,9 @@ class WelcomeMessageView(ui.View):
         await interaction.response.defer(ephemeral=True, thinking=True)
         color_help = (
             "## Color How-to\n"
-            "Click the **Color Picker** button, pick your color, and use the HEX value (include the '#')."
+            "Click the **Color Picker** button, pick your color, and use the color value.\n"
+            "Supported color format:\n"
+            "-# - `HEX`\n-# - `#HEX`\n-# - `0xHEX`\n-# - `rgb(RED, GREEN, BLUE)`"
         )
         var_help = await VarParser.get_help()
         await interaction.followup.send(
