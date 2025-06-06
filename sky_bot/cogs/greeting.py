@@ -1,8 +1,10 @@
+import os
+from pathlib import Path
 from typing import Any
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from ..embed_template import fail, success
 from ..remote_config import remote_config
@@ -33,6 +35,21 @@ class Greeting(commands.Cog):
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
+        self._img_types = ["jpg", "jpeg", "png", "webp", "gif"]
+
+    async def cog_load(self):
+        self._find_db_channel.start()
+
+    @tasks.loop(count=1)
+    async def _find_db_channel(self):
+        await self.bot.wait_until_ready()
+        db_id = int(os.getenv("DATABASE_CHANNEL", "0"))
+        self._db_channel: discord.TextChannel | None = self.bot.get_channel(db_id)  # type: ignore
+
+    def _is_img_file_valid(self, file: discord.Attachment):
+        mime = file.content_type
+        suffix = Path(file.filename).suffix[1:]
+        return mime and mime[6:] in self._img_types and suffix in self._img_types
 
     async def fetch_welcome_msg(self, guild_id: int):
         msg = await remote_config.get_json(self._WELCOME_KEY, guild_id, "message")
@@ -106,6 +123,80 @@ class Greeting(commands.Cog):
         msg_data = builder.build(msg_obj)
         view = WelcomeMessageView(msg_obj=msg_obj, builder=builder)
         await interaction.followup.send(**msg_data, view=view)
+
+    @group_welcome.command(
+        name="image",
+        description="Set image in welcome message, either upload a file or use an url.",
+    )
+    @app_commands.describe(
+        file="Upload an image file.",
+        url="Use an image url.",
+    )
+    async def welcome_image(
+        self,
+        interaction: Interaction,
+        file: discord.Attachment | None = None,
+        url: str | None = None,
+    ):
+        await interaction.response.defer(ephemeral=True)
+        guild: discord.Guild = interaction.guild  # type: ignore
+        if not await remote_config.exists_json(self._WELCOME_KEY, guild.id, "message"):
+            # 需要先设置消息才能单独更改图片
+            await interaction.followup.send(
+                embed=await fail("Please set message first"),
+            )
+            return
+        if not file and not url:
+            # 至少要指定一个参数
+            await interaction.followup.send(
+                embed=await fail("Both options are empty"),
+            )
+            return
+        if file:
+            # 需要设置database频道以支持文件上传
+            if not self._db_channel:
+                await interaction.followup.send(
+                    embed=await fail("File uploading not available"),
+                )
+                return
+            # 检查图片文件格式
+            if not self._is_img_file_valid(file):
+                await interaction.followup.send(
+                    embed=await fail(
+                        "Format not supported",
+                        description="Only support "
+                        + ", ".join([f"`{t}`" for t in self._img_types]),
+                    ),
+                )
+                return
+            # 发送文件至database频道并获取url
+            f = await file.to_file()
+            msg = await self._db_channel.send(
+                content=f"Welcome image for **{guild.name}** `{guild.id}`",
+                file=f,
+            )
+            url = msg.attachments[0].url
+        try:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    color=discord.Color.green(),
+                    title="Welcome image saved",
+                ).set_image(url=url)
+            )
+            # 保存图像url
+            await remote_config.set_json(
+                self._WELCOME_KEY, guild.id, "message", "image", value=url
+            )
+        except discord.HTTPException as ex:
+            if ex.status == 400:
+                # url格式错误
+                await interaction.followup.send(
+                    embed=await fail("Invalid url format"),
+                )
+            else:
+                await interaction.followup.send(
+                    embed=await fail("Error while saving", description=str(ex)),
+                )
 
     @group_welcome.command(name="roles", description="Set default roles for new members.")  # fmt: skip
     async def welcome_roles(self, interaction: Interaction):

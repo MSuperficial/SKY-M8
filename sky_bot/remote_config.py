@@ -51,6 +51,11 @@ class RemoteConfig:
         value = obj.to_dict()  # type: ignore
         return await self.set_dict(key, value)
 
+    async def exists_json(self, key, *path):
+        path = ".".join(["$"] + [str(p) for p in path])
+        result = await self.redis.json.type(key, path)
+        return result != []
+
     async def get_json(self, key, *path):
         path = ".".join(["$"] + [str(p) for p in path])
         value: list[dict[str, Any]] = await self.redis.json.get(key, path)  # type: ignore
