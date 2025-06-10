@@ -3,11 +3,13 @@ from datetime import datetime, timedelta
 from typing import NamedTuple
 
 from ..remote_config import remote_config
+from .shard import get_shard_info
 
 __all__ = (
     "DailyEventData",
-    "fetch_events",
-    "fetch_event_data",
+    "fetch_displayed_events",
+    "fetch_all_event_data",
+    "filter_events",
     "get_daily_event_time",
 )
 
@@ -16,11 +18,12 @@ _EVENTS_KEY = "dailyClock.events"
 
 _default_events = [
     "geyser",
-    "peaks_shard",
-    "aurora",
+    "peakshard",
     "grandma",
     "turtle",
-    "daily_reset",
+    "aurora",
+    "firework",
+    "dailyreset",
 ]
 
 
@@ -30,6 +33,7 @@ class DailyEventData(NamedTuple):
     offset: int
     duration: int
     period: int
+    days_of_month: list[int] | None = None
 
 
 _daily_event_data = {
@@ -40,19 +44,12 @@ _daily_event_data = {
         duration=10,
         period=120,
     ),
-    "peaks_shard": DailyEventData(
-        id="peaks_shard",
+    "peakshard": DailyEventData(
+        id="peakshard",
         name="🏔️ Peaks Shard",
         offset=8,
         duration=22,
         period=30,
-    ),
-    "aurora": DailyEventData(
-        id="aurora",
-        name="🎶 Aurora Concert",
-        offset=10,
-        duration=48,
-        period=240,
     ),
     "grandma": DailyEventData(
         id="grandma",
@@ -68,9 +65,24 @@ _daily_event_data = {
         duration=10,
         period=120,
     ),
-    "daily_reset": DailyEventData(
-        id="daily_reset",
-        name="⏱️ Daily reset",
+    "aurora": DailyEventData(
+        id="aurora",
+        name="🎶 Aurora Concert",
+        offset=10,
+        duration=48,
+        period=240,
+    ),
+    "firework": DailyEventData(
+        id="firework",
+        name="🎆 Aviary Firework",
+        offset=10,
+        duration=10,
+        period=240,
+        days_of_month=[1],
+    ),
+    "dailyreset": DailyEventData(
+        id="dailyreset",
+        name="⏱️ Daily Reset",
         offset=0,
         duration=0,
         period=24 * 60,
@@ -78,7 +90,7 @@ _daily_event_data = {
 }
 
 
-async def fetch_events():
+async def fetch_displayed_events():
     events: list[str] = _default_events
     value = await remote_config.get_field(_EVENTS_KEY, "displayed_events")
     if value:
@@ -86,7 +98,7 @@ async def fetch_events():
     return events
 
 
-async def fetch_event_data():
+async def fetch_all_event_data():
     data = _daily_event_data.copy()
     overrides: dict[str, dict] = {}
     value = await remote_config.get_field(_EVENTS_KEY, "event_data_overrides")
@@ -98,6 +110,22 @@ async def fetch_event_data():
         else:
             data[k] = DailyEventData(**v)
     return data
+
+
+def filter_events(event_data: list[DailyEventData], date: datetime):
+    def available(e: DailyEventData):
+        # 判断是否在设定的日期内
+        if e.days_of_month is not None and date.day not in e.days_of_month:
+            return False
+        # 如果今天没有Peaks Shard或其不提供烛火，则无需显示其信息
+        if e.id == "peakshard":
+            shard_info = get_shard_info(date)
+            if not (shard_info.has_shard and shard_info.extra_shard):
+                return False
+        return True
+
+    events = [e for e in event_data if available(e)]
+    return events
 
 
 def get_daily_event_time(now: datetime, event_data: DailyEventData):

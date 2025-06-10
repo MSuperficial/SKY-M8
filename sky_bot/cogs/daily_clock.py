@@ -1,5 +1,4 @@
 import asyncio
-from contextlib import suppress
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -9,11 +8,11 @@ from discord.utils import format_dt as timestamp
 from ..sky_bot import SkyBot
 from ..sky_event.daily import (
     DailyEventData,
-    fetch_event_data,
-    fetch_events,
+    fetch_all_event_data,
+    fetch_displayed_events,
+    filter_events,
     get_daily_event_time,
 )
-from ..sky_event.shard import get_shard_info
 from ..utils import sky_time_now
 from .base.live_update import LiveUpdateCog
 
@@ -42,14 +41,10 @@ class DailyClock(
         return msg
 
     async def get_all_daily_event_msg(self, when: datetime, header=True, footer=True):
-        events = await fetch_events()
-        shard_info = get_shard_info(when)
-        # 如果今天Peaks Shard不提供烛火，则无需显示其信息
-        if not (shard_info.has_shard and shard_info.extra_shard):
-            with suppress(ValueError):
-                events.remove("peaks_shard")  # 移除该事件
-        data = await fetch_event_data()
-        msgs = [self.get_daily_event_msg(when, data[e]) for e in events]
+        events = await fetch_displayed_events()
+        data = await fetch_all_event_data()
+        available_events = filter_events([data[e] for e in events], when)
+        msgs = [self.get_daily_event_msg(when, e) for e in available_events]
         dailies_msg = "\n".join(msgs)
         if header:
             dailies_msg = "# Sky Clock\n" + dailies_msg
