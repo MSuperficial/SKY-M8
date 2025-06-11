@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+from sky_bot.mentionable_tree import MentionableTree
 from sky_bot.sky_bot import SkyBot
 
 if os.name == "nt":
@@ -35,6 +36,7 @@ async def main():
         commands.when_mentioned_or("!"),
         initial_extensions=initial_extensions,
         intents=intents,
+        tree_cls=MentionableTree,
         proxy=os.getenv("PROXY"),
     )
 
