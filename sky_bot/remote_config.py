@@ -84,5 +84,9 @@ class RemoteConfig:
         result = await self.redis.json.merge(key, path, value)
         return result
 
+    async def delete_json(self, key, *path):
+        path = ".".join(["$"] + [str(p) for p in path])
+        await self.redis.json.delete(key, path)
+
 
 remote_config = RemoteConfig()

@@ -1,23 +1,17 @@
-import os
 from datetime import datetime, time
-
-import discord
 from zoneinfo import ZoneInfo
 
 __all__ = (
     "SKY_TIMEZONE",
-    "get_id_from_env",
     "sky_time_now",
-    "msg_exist_async",
+    "sky_datetime",
+    "sky_time",
+    "format_utcoffset",
+    "format_localtime",
+    "code_block",
 )
 
 SKY_TIMEZONE = ZoneInfo("America/Los_Angeles")
-
-
-def get_id_from_env(key):
-    if (id_str := os.getenv(key)) is None:
-        raise Exception("Missing environment variable " + key)
-    return int(id_str)
 
 
 def sky_time_now() -> datetime:
@@ -36,13 +30,17 @@ def sky_time(hour=0, minute=0, second=0, microsecond=0) -> time:
     return time(hour, minute, second, microsecond, tzinfo=SKY_TIMEZONE)
 
 
+def format_utcoffset(dt: datetime):
+    offset = dt.strftime("%z")
+    if offset:
+        offset = f"UTC{offset[:3]}:{offset[3:]}"
+    return offset
+
+
+def format_localtime(dt: datetime):
+    dt_str = dt.strftime("%Y/%m/%d %A %H:%M:%S")
+    return dt_str
+
+
 def code_block(msg, lang=None):
     return f"```{lang}\n{msg}\n```"
-
-
-async def msg_exist_async(msg: discord.Message):
-    try:
-        await msg.fetch()
-        return True
-    except discord.NotFound:
-        return False
