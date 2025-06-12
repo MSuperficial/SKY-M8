@@ -15,6 +15,7 @@ __all__ = (
     "MessageTransformer",
     "DateTransformer",
     "date_autocomplete",
+    "match_timezones",
     "tz_autocomplete",
 )
 
@@ -82,15 +83,19 @@ async def date_autocomplete(interaction: Interaction, value: str):
     return choices
 
 
-async def tz_autocomplete(interaction: Interaction, value: str) -> list[Choice[str]]:
+def match_timezones(tz: str, *, limit: int) -> list[str]:
     matches: list[tuple[str, int]] = []
-    if len(query := full_process(value, force_ascii=True)) != 0:
+    if len(query := full_process(tz, force_ascii=True)) != 0:
         matches = process.extractBests(
             query,
             pytz.common_timezones,
             processor=None,
             score_cutoff=70,
-            limit=10,
+            limit=limit,
         )
-    choices = [Choice(name=m[0], value=m[0]) for m in matches]
+    return [m[0] for m in matches]
+
+async def tz_autocomplete(interaction: Interaction, value: str):
+    matches = match_timezones(value, limit=10)
+    choices = [Choice(name=m, value=m) for m in matches]
     return choices

@@ -10,7 +10,7 @@ from ..embed_template import fail, success
 from ..remote_config import remote_config
 from ..sky_bot import SkyBot
 from ..utils import format_localtime, format_utcoffset
-from .helper.common import tz_autocomplete
+from .helper.common import match_timezones, tz_autocomplete
 
 
 class FieldTransformer(app_commands.Transformer):
@@ -39,17 +39,17 @@ class Profile(commands.Cog):
 
     @group_profile.command(name="visibility", description="Set your profile's visibility to others.")  # fmt: skip
     @app_commands.describe(
-        visibility="Whether others can see your profile, by default is True",
+        private="Whether to hide your profile to others, by default False",
     )
-    async def profile_visibility(self, interaction: Interaction, visibility: bool):
+    async def profile_visibility(self, interaction: Interaction, private: bool):
         await interaction.response.defer(ephemeral=True)
         user = interaction.user
         try:
-            await remote_config.set_json(self._PROFILE_KEY, user.id, "visibility", value=visibility)  # fmt: skip
+            await remote_config.set_json(self._PROFILE_KEY, user.id, "private", value=private)  # fmt: skip
             await interaction.followup.send(
                 embed=await success(
                     "Success",
-                    description=f"Your profile is now __{'public' if visibility else 'private'}__.",
+                    description=f"Your profile is now __{'private' if private else 'public'}__.",
                 )
             )
         except Exception as ex:
@@ -85,6 +85,11 @@ class Profile(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         # 检查时区是否有效
         if timezone not in pytz.common_timezones:
+            # 提示用户可能的匹配
+            hint = ""
+            matches = match_timezones(timezone, limit=5)
+            if matches:
+                hint = "\n".join(["Did you mean:"] + [f"- `{m}`" for m in matches])
             embed = await fail(
                 "Invalid time zone",
                 description="If you're not sure about your time zone, click the button below to check!",
@@ -97,6 +102,7 @@ class Profile(commands.Cog):
                 )
             )
             await interaction.followup.send(
+                content=hint,
                 embed=embed,
                 view=view,
                 ephemeral=True,
@@ -105,9 +111,7 @@ class Profile(commands.Cog):
         user = interaction.user
         try:
             tz = ZoneInfo(timezone)
-            await remote_config.set_json(
-                self._PROFILE_KEY, user.id, "timezone", value=timezone
-            )
+            await remote_config.set_json(self._PROFILE_KEY, user.id, "timezone", value=timezone)  # fmt: skip
             # 展示当前时区信息
             now = datetime.now(tz)
             desc = (
