@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 import pytz
@@ -9,8 +10,18 @@ from discord.ext import commands
 from ..embed_template import fail, success
 from ..remote_config import remote_config
 from ..sky_bot import SkyBot
-from ..utils import format_localtime, format_utcoffset
+from ..utils import format_dt_full, format_utcoffset
 from .helper.common import match_timezones, tz_autocomplete
+
+__all__ = (
+    "UserProfile",
+    "Profile",
+)
+
+
+class UserProfile(NamedTuple):
+    private: bool
+    timezone: ZoneInfo | None
 
 
 class FieldTransformer(app_commands.Transformer):
@@ -33,6 +44,27 @@ class Profile(commands.Cog):
         name="profile",
         description="View and edit your personal profile.",
     )
+
+    @classmethod
+    async def user(cls, user_id: int):
+        obj: dict[str, Any] | None = await remote_config.get_json(
+            cls._PROFILE_KEY, user_id
+        )
+        if not obj:
+            return None
+        timezone = None
+        if obj["timezone"] in pytz.common_timezones:
+            timezone = ZoneInfo(obj["timezone"])
+        return UserProfile(
+            private=obj["private"],
+            timezone=timezone,
+        )
+
+    @classmethod
+    async def user_fields(cls, user_id: int, *fields: str):
+        paths = [[user_id, f] for f in fields]
+        values = await remote_config.get_json_m(cls._PROFILE_KEY, *paths)
+        return values
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
@@ -117,7 +149,7 @@ class Profile(commands.Cog):
             desc = (
                 f"### Your Time Zone\n`{timezone}`\n"
                 f"### UTC Offset\n`{format_utcoffset(now)}`\n"
-                f"### Current Local Time\n`{format_localtime(now)}`"
+                f"### Current Local Time\n`{format_dt_full(now)}`"
             )
             await interaction.followup.send(
                 embed=await success("Success", description=desc)

@@ -51,18 +51,33 @@ class RemoteConfig:
         value = obj.to_dict()  # type: ignore
         return await self.set_dict(key, value)
 
+    def _join_path(self, *path):
+        return ".".join(["$"] + [str(p) for p in path])
+
     async def exists_json(self, key, *path):
-        path = ".".join(["$"] + [str(p) for p in path])
+        path = self._join_path(*path)
         result = await self.redis.json.type(key, path)
         return result != []
 
     async def get_json(self, key, *path):
-        path = ".".join(["$"] + [str(p) for p in path])
-        value: list[dict[str, Any]] = await self.redis.json.get(key, path)  # type: ignore
+        path = self._join_path(*path)
+        value: list[dict[str, Any] | Any] = await self.redis.json.get(key, path)  # type: ignore
         if len(value) == 0:
             return None
         else:
             return value[0]
+
+    async def get_json_m(self, key, *paths):
+        if len(paths) == 1:
+            return await self.get_json(key, *paths[0])
+        paths = [self._join_path(*p) for p in paths]
+        value_dict: dict[str, list[Any]] = await self.redis.json.get(key, *paths)  # type: ignore
+        values = [value_dict[p] for p in paths]
+        values = [v[0] if v else None for v in values]
+        if len(values) == 1:
+            return values[0]
+        else:
+            return values
 
     async def _ensure_path_exist(self, key, *path):
         if not await self.redis.json.type(key):
@@ -74,18 +89,18 @@ class RemoteConfig:
 
     async def set_json(self, key, *path, value) -> bool:
         await self._ensure_path_exist(key, *path)
-        path = ".".join(["$"] + [str(p) for p in path])
+        path = self._join_path(*path)
         result = await self.redis.json.set(key, path, value)
         return result
 
     async def merge_json(self, key, *path, value) -> bool:
         await self._ensure_path_exist(key, *path)
-        path = ".".join(["$"] + [str(p) for p in path])
+        path = self._join_path(*path)
         result = await self.redis.json.merge(key, path, value)
         return result
 
     async def delete_json(self, key, *path):
-        path = ".".join(["$"] + [str(p) for p in path])
+        path = self._join_path(*path)
         await self.redis.json.delete(key, path)
 
 

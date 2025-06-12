@@ -7,7 +7,7 @@ __all__ = (
     "sky_datetime",
     "sky_time",
     "format_utcoffset",
-    "format_localtime",
+    "format_dt_full",
     "code_block",
 )
 
@@ -37,7 +37,7 @@ def format_utcoffset(dt: datetime):
     return offset
 
 
-def format_localtime(dt: datetime):
+def format_dt_full(dt: datetime):
     dt_str = dt.strftime("%Y/%m/%d %A %H:%M:%S")
     return dt_str
 

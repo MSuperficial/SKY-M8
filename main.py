@@ -26,6 +26,7 @@ async def main():
 
     initial_extensions = [
         "profile",
+        "tools",
         "greeting",
         "role_manager",
         "daily_clock",
