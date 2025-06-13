@@ -110,19 +110,23 @@ class Profile(commands.Cog):
 
     @group_profile.command(name="timezone", description="Set your time zone.")
     @app_commands.describe(
-        timezone="IANA identifier of your time zone.",
+        timezone="Time zone id or country where only one time zone is used.",
     )
     @app_commands.autocomplete(timezone=tz_autocomplete)
     async def profile_timezone(self, interaction: Interaction, timezone: str):
         await interaction.response.defer(ephemeral=True)
-        # 检查时区是否有效
-        if timezone not in pytz.common_timezones:
-            # 提示用户可能的匹配
+        # 尝试精确匹配时区
+        match = TimezoneFinder.exact_match(timezone)
+        if not match:
+            # 时区无效则提示用户可能的匹配并返回
             matches = TimezoneFinder.best_matches(timezone, limit=5)
             hint = format_hint(matches)
             embed = await fail(
                 "Invalid time zone",
-                description="If you're not sure about your time zone, click the button below to check!",
+                description=(
+                    f"Cannot find a time zone matching `{timezone}`.\n"
+                    "If you're not sure about your time zone, click the button below to check!"
+                ),
             )
             view = ui.View().add_item(
                 ui.Button(
@@ -139,10 +143,11 @@ class Profile(commands.Cog):
             )
             return
         user = interaction.user
+        timezone = match[0]
         try:
-            tz = ZoneInfo(timezone)
             await remote_config.set_json(self._PROFILE_KEY, user.id, "timezone", value=timezone)  # fmt: skip
             # 展示当前时区信息
+            tz = ZoneInfo(timezone)
             now = datetime.now(tz)
             desc = (
                 f"### Your Time Zone\n`{timezone}`\n"

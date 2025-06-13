@@ -40,13 +40,42 @@ class TimezoneFinder:
             )
         results: list[tuple[str, str | None]] = []
         for m in [m[0] for m in matches]:
-            if m in country_timezones:
-                results.extend((tz, m) for tz in country_timezones[m])
+            if tzs := country_timezones.get(m):
+                results.extend((tz, m) for tz in tzs)
             else:
                 results.append((m, timezone_country.get(m)))
         # fromkeys 移除重复项同时保留顺序
         results = list(dict.fromkeys(results))[:limit]
         return results
+
+    @classmethod
+    def exact_match(cls, query: str):
+        query = full_process(query, force_ascii=True)
+        if not query:
+            return None
+        matches: list[tuple[str, int]] = process.extractBests(
+            query,
+            cls._choices,
+            processor=None,
+            score_cutoff=90,
+            limit=2,
+        )
+        # 如果不存在最高分则返回
+        if len(matches) == 2 and matches[0][1] == matches[1][1]:
+            return None
+        # 得到最优匹配
+        best = matches[0][0]
+        exact: tuple[str, str | None]
+        # 检查匹配的是地区名还是时区名
+        if tzs := country_timezones.get(best):
+            # 如果该地区有多个时区则不能精确匹配
+            if len(tzs) > 1:
+                return None
+            else:
+                exact = (tzs[0], best)
+        else:
+            exact = (best, timezone_country.get(best))
+        return exact
 
 
 def format_hint(matches: list[tuple[str, str | None]]):

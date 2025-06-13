@@ -1,7 +1,6 @@
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-import pytz
 from discord import Interaction, TextStyle, ui
 
 from ...embed_template import fail
@@ -138,7 +137,7 @@ class TimeModal(ui.Modal, title="Set Time"):
 
 
 class TimeZoneModal(ui.Modal, title="Set Time Zone"):
-    text_tz = ui.TextInput(label="Time Zone (IANA Identifier)")
+    text_tz = ui.TextInput(label="Time Zone")
 
     def __init__(self, *, dt: datetime):
         self.timezone = dt.tzinfo
@@ -148,11 +147,12 @@ class TimeZoneModal(ui.Modal, title="Set Time Zone"):
     async def on_submit(self, interaction: Interaction):
         await interaction.response.defer()
         tz = self.text_tz.value
-        if tz in pytz.common_timezones:
-            self.timezone = ZoneInfo(tz)
+        # 尝试精确匹配时区
+        if match := TimezoneFinder.exact_match(tz):
+            self.timezone = ZoneInfo(match[0])
             self.valid = True
         else:
-            # 时区无效则提示用户可能的匹配并返回
+            # 时区无效则提示用户可能的匹配
             matches = TimezoneFinder.best_matches(tz, limit=5)
             hint = format_hint(matches)
             embed = await fail("Invalid time zone")

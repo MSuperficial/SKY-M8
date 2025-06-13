@@ -3,7 +3,6 @@ from typing import Any, get_args
 from zoneinfo import ZoneInfo
 
 import discord
-import pytz
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
 from discord.utils import TimestampStyle, format_dt
@@ -12,7 +11,12 @@ from ...embed_template import fail
 from ...sky_bot import SkyBot
 from ...utils import format_dt_full, format_utcoffset
 from ..base.views import DateModal, TimeModal, TimeZoneModal
-from ..helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
+from ..helper.timezone import (
+    TimezoneFinder,
+    format_hint,
+    timezone_country,
+    tz_autocomplete,
+)
 from ..profile import Profile
 
 __all__ = ("TimestampMaker",)
@@ -24,7 +28,7 @@ class TimestampMaker(commands.Cog):
 
     @app_commands.command(name="timestamp", description="Get formated discord timestamp, by default in your time zone.")  # fmt: skip
     @app_commands.describe(
-        timezone="Use the specified time zone.",
+        timezone="Use the specified time zone, can be a country where only one time zone is used.",
         others="Use the user's time zone if provided.",
     )
     @app_commands.autocomplete(timezone=tz_autocomplete)
@@ -38,16 +42,16 @@ class TimestampMaker(commands.Cog):
         # 使用时区的优先级 timezone > others > UserProfile
         tzinfo = None
         if timezone:
-            # 检查时区是否有效
-            if timezone in pytz.common_timezones:
-                tzinfo = ZoneInfo(timezone)
+            # 尝试精确匹配时区
+            if match := TimezoneFinder.exact_match(timezone):
+                tzinfo = ZoneInfo(match[0])
             else:
                 # 时区无效则提示用户可能的匹配并返回
                 matches = TimezoneFinder.best_matches(timezone, limit=5)
                 hint = format_hint(matches)
                 embed = await fail(
                     "Invalid time zone",
-                    description=f"`{timezone}` is not a valid IANA time zone id.",
+                    description=f"Cannot find a time zone matching `{timezone}`.",
                 )
                 await interaction.followup.send(
                     content=hint,
@@ -100,10 +104,11 @@ class TimestampView(ui.View):
 
     def create_message(self) -> dict[str, Any]:
         tz: ZoneInfo = self.dt.tzinfo  # type: ignore
+        country = timezone_country.get(tz.key)
         selected = (
             "## Selected Date and Time\n"
             f"`{format_dt_full(self.dt)}`\n"
-            f"`{tz.key} {format_utcoffset(self.dt)}`"
+            f"`{tz.key} {format_utcoffset(self.dt)}{f' {country}' if country else ''}`"
         )
         tips = (
             "### How to copy\n"
