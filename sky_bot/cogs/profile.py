@@ -11,7 +11,7 @@ from ..embed_template import fail, success
 from ..remote_config import remote_config
 from ..sky_bot import SkyBot
 from ..utils import format_dt_full, format_utcoffset
-from .helper.common import match_timezones, tz_autocomplete
+from .helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
 
 __all__ = (
     "UserProfile",
@@ -118,10 +118,8 @@ class Profile(commands.Cog):
         # 检查时区是否有效
         if timezone not in pytz.common_timezones:
             # 提示用户可能的匹配
-            hint = ""
-            matches = match_timezones(timezone, limit=5)
-            if matches:
-                hint = "\n".join(["Did you mean:"] + [f"- `{m}`" for m in matches])
+            matches = TimezoneFinder.best_matches(timezone, limit=5)
+            hint = format_hint(matches)
             embed = await fail(
                 "Invalid time zone",
                 description="If you're not sure about your time zone, click the button below to check!",

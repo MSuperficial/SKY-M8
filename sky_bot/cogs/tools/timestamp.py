@@ -12,7 +12,7 @@ from ...embed_template import fail
 from ...sky_bot import SkyBot
 from ...utils import format_dt_full, format_utcoffset
 from ..base.views import DateModal, TimeModal, TimeZoneModal
-from ..helper.common import match_timezones, tz_autocomplete
+from ..helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
 from ..profile import Profile
 
 __all__ = ("TimestampMaker",)
@@ -43,10 +43,8 @@ class TimestampMaker(commands.Cog):
                 tzinfo = ZoneInfo(timezone)
             else:
                 # 时区无效则提示用户可能的匹配并返回
-                hint = ""
-                matches = match_timezones(timezone, limit=5)
-                if matches:
-                    hint = "\n".join(["Did you mean:"] + [f"- `{m}`" for m in matches])
+                matches = TimezoneFinder.best_matches(timezone, limit=5)
+                hint = format_hint(matches)
                 embed = await fail(
                     "Invalid time zone",
                     description=f"`{timezone}` is not a valid IANA time zone id.",

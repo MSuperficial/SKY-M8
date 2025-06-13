@@ -2,12 +2,9 @@ import calendar
 import re
 from datetime import datetime
 
-import pytz
 from discord import Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
-from thefuzz import process
-from thefuzz.utils import full_process
 
 from ...utils import sky_datetime, sky_time_now
 
@@ -15,8 +12,6 @@ __all__ = (
     "MessageTransformer",
     "DateTransformer",
     "date_autocomplete",
-    "match_timezones",
-    "tz_autocomplete",
 )
 
 
@@ -80,22 +75,4 @@ async def date_autocomplete(interaction: Interaction, value: str):
             days = [d_ for d_ in days if d_ // 10 == d]
             results = [value[:-1] + str(d) for d in days]
     choices = [Choice(name=r, value=r) for r in results]
-    return choices
-
-
-def match_timezones(tz: str, *, limit: int) -> list[str]:
-    matches: list[tuple[str, int]] = []
-    if len(query := full_process(tz, force_ascii=True)) != 0:
-        matches = process.extractBests(
-            query,
-            pytz.common_timezones,
-            processor=None,
-            score_cutoff=70,
-            limit=limit,
-        )
-    return [m[0] for m in matches]
-
-async def tz_autocomplete(interaction: Interaction, value: str):
-    matches = match_timezones(value, limit=10)
-    choices = [Choice(name=m, value=m) for m in matches]
     return choices

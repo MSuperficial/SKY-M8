@@ -5,7 +5,7 @@ import pytz
 from discord import Interaction, TextStyle, ui
 
 from ...embed_template import fail
-from ..helper.common import match_timezones
+from ..helper.timezone import TimezoneFinder, format_hint
 
 
 class EmptyModal(ui.Modal):
@@ -153,10 +153,8 @@ class TimeZoneModal(ui.Modal, title="Set Time Zone"):
             self.valid = True
         else:
             # 时区无效则提示用户可能的匹配并返回
-            hint = ""
-            matches = match_timezones(tz, limit=5)
-            if matches:
-                hint = "\n".join(["Did you mean:"] + [f"- `{m}`" for m in matches])
+            matches = TimezoneFinder.best_matches(tz, limit=5)
+            hint = format_hint(matches)
             embed = await fail("Invalid time zone")
             await interaction.followup.send(
                 content=hint,
