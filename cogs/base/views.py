@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from discord import Interaction, TextStyle, ui
 
-from ...embed_template import fail
+from ..helper.embeds import fail
 from ..helper.timezone import TimezoneFinder, format_hint
 
 

@@ -6,16 +6,17 @@ import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands, tasks
 
-from ..embed_template import fail, success
-from ..remote_config import remote_config
-from ..sky_bot import SkyBot
+from sky_bot import SkyBot
+from utils.remote_config import remote_config
+
 from .base.views import LongTextModal, ShortTextModal
+from .helper.embeds import fail, success
 from .helper.var_parser import VarParser
 
-__all__ = ("Greeting",)
+__all__ = ("Welcome",)
 
 
-class Greeting(commands.Cog):
+class Welcome(commands.Cog):
     _WELCOME_KEY = "welcomeSetup"
     _DEFAULT_MSG: dict[str, Any] = {
         "ping": False,
@@ -416,7 +417,7 @@ class WelcomeMessageView(ui.View):
         guild: discord.Guild = interaction.guild  # type: ignore
         try:
             await remote_config.merge_json(
-                Greeting._WELCOME_KEY, guild.id, "message", value=self.msg_obj
+                Welcome._WELCOME_KEY, guild.id, "message", value=self.msg_obj
             )
             await interaction.followup.send(
                 embed=await success("Welcome message saved"),
@@ -461,7 +462,7 @@ class WelcomeRolesView(ui.View):
         invalid = [r for r in roles if not r.is_assignable()]
         try:
             await remote_config.merge_json(
-                Greeting._WELCOME_KEY,
+                Welcome._WELCOME_KEY,
                 guild.id,
                 "roles",
                 value=[str(r.id) for r in valid],
@@ -481,4 +482,4 @@ class WelcomeRolesView(ui.View):
 
 
 async def setup(bot: SkyBot):
-    await bot.add_cog(Greeting(bot))
+    await bot.add_cog(Welcome(bot))

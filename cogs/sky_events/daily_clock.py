@@ -5,16 +5,17 @@ from typing import Any
 from discord.ext import commands
 from discord.utils import format_dt as timestamp
 
-from ..sky_bot import SkyBot
-from ..sky_event.daily import (
+from sky_bot import SkyBot
+
+from ..base.live_update import LiveUpdateCog
+from ..helper.times import sky_time_now
+from .data.daily import (
     DailyEventData,
     fetch_all_event_data,
     fetch_displayed_events,
     filter_events,
     get_daily_event_time,
 )
-from ..utils import sky_time_now
-from .base.live_update import LiveUpdateCog
 
 __all__ = ("DailyClock",)
 
@@ -22,7 +23,7 @@ __all__ = ("DailyClock",)
 class DailyClock(
     LiveUpdateCog,
     live_key="dailyClock.webhooks",
-    group_live_name="clock-live",
+    group_live_name="skyclock-live",
     live_display_name="Sky Clock",
     live_update_interval={"minutes": 1},
 ):
@@ -53,7 +54,7 @@ class DailyClock(
         return dailies_msg
 
     @commands.command()
-    async def clock(self, ctx: commands.Context, offset: int = 0):
+    async def skyclock(self, ctx: commands.Context, offset: int = 0):
         now = sky_time_now()
         date = now + timedelta(days=offset)
         msg = await self.get_all_daily_event_msg(date)

@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 from enum import Enum
 from typing import NamedTuple
 
-from ..utils import SKY_TIMEZONE
+from cogs.helper.times import SKY_TIMEZONE
 
 __all__ = (
     "ShardType",

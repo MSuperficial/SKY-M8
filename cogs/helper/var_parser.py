@@ -1,13 +1,15 @@
 import re
 from datetime import datetime
-from typing import Callable, Union, get_args
+from typing import Callable, Union
 
 import discord
 from discord import Guild, Interaction, Member, User
-from discord.utils import TimestampStyle, format_dt, get
+from discord.utils import get
 
-from ...remote_config import remote_config
-from ...sky_bot import SkyBot
+from sky_bot import SkyBot
+from utils.remote_config import remote_config
+
+from .formats import ordinal, timestamp
 
 __all__ = (
     "VarContext",
@@ -73,26 +75,6 @@ def _member_pos(member: Member):
     )
     pos = members.index(member) + 1
     return pos
-
-
-def ordinal(number: int):
-    suffix = "th"
-    num_abs = abs(number)
-    dig_1 = num_abs % 10
-    dig_2 = num_abs // 10 % 10
-    if dig_1 in [1, 2, 3] and dig_2 != 1:
-        suffix = ["st", "nd", "rd"][dig_1 - 1]
-    return str(number) + suffix
-
-
-def timestamp(dt: datetime, style: str | None):
-    style = style or "f"
-    if style == "u":
-        return str(int(dt.timestamp()))
-    elif style in get_args(TimestampStyle):
-        return format_dt(dt, style)  # type: ignore
-    else:
-        return None
 
 
 def _id(value: str):

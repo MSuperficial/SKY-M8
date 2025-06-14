@@ -9,10 +9,12 @@ from discord import Interaction, app_commands
 from discord.ext import commands, tasks
 from discord.utils import MISSING, get
 
-from ...embed_template import fail, success
-from ...remote_config import remote_config
-from ...sky_bot import SkyBot
-from ...utils import code_block, sky_time_now
+from sky_bot import SkyBot
+from utils.remote_config import remote_config
+
+from ..helper.embeds import fail, success
+from ..helper.formats import code_block
+from ..helper.times import sky_time_now
 
 __all__ = ("LiveUpdateCog",)
 

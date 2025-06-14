@@ -12,9 +12,9 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
-from ..embed_template import fail, success
 from .base.views import LongTextModal, ShortTextModal
-from .helper.common import MessageTransformer
+from .helper.converters import MessageTransformer
+from .helper.embeds import fail, success
 
 __all__ = ("RoleManager",)
 

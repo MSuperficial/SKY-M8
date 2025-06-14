@@ -7,17 +7,18 @@ from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
 from discord.utils import TimestampStyle, format_dt
 
-from ...embed_template import fail
-from ...sky_bot import SkyBot
-from ...utils import format_dt_full, format_utcoffset
+from sky_bot import SkyBot
+
 from ..base.views import DateModal, TimeModal, TimeZoneModal
+from ..helper import formats
+from ..helper.embeds import fail
 from ..helper.timezone import (
     TimezoneFinder,
     format_hint,
     timezone_country,
     tz_autocomplete,
 )
-from ..profile import Profile
+from ..info.profile import Profile
 
 __all__ = ("TimestampMaker",)
 
@@ -107,8 +108,8 @@ class TimestampView(ui.View):
         country = timezone_country.get(tz.key)
         selected = (
             "## Selected Date and Time\n"
-            f"`{format_dt_full(self.dt)}`\n"
-            f"`{tz.key} {format_utcoffset(self.dt)}{f' {country}' if country else ''}`"
+            f"`{formats.dt_full(self.dt)}`\n"
+            f"`{tz.key} {formats.utcoffset(self.dt)}{f' {country}' if country else ''}`"
         )
         tips = (
             "### How to copy\n"

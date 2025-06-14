@@ -1,4 +1,4 @@
-from sky_bot.sky_bot import SkyBot
+from sky_bot import SkyBot
 
 from .timestamp import TimestampMaker
 

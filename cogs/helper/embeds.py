@@ -1,8 +1,11 @@
 from discord import Color, Embed
 
-from .remote_config import remote_config
+from utils.remote_config import remote_config
 
-__all__ = ("success", "fail")
+__all__ = (
+    "success",
+    "fail",
+)
 
 
 async def success(title: str, *, color=Color.green(), description=None):

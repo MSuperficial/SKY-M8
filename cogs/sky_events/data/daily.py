@@ -2,7 +2,8 @@ import json
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from ..remote_config import remote_config
+from utils.remote_config import remote_config
+
 from .shard import get_shard_info
 
 __all__ = (

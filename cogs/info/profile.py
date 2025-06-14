@@ -7,11 +7,12 @@ from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from ..embed_template import fail, success
-from ..remote_config import remote_config
-from ..sky_bot import SkyBot
-from ..utils import format_dt_full, format_utcoffset
-from .helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
+from sky_bot import SkyBot
+from utils.remote_config import remote_config
+
+from ..helper import formats
+from ..helper.embeds import fail, success
+from ..helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
 
 __all__ = (
     "UserProfile",
@@ -151,8 +152,8 @@ class Profile(commands.Cog):
             now = datetime.now(tz)
             desc = (
                 f"### Your Time Zone\n`{timezone}`\n"
-                f"### UTC Offset\n`{format_utcoffset(now)}`\n"
-                f"### Current Local Time\n`{format_dt_full(now)}`"
+                f"### UTC Offset\n`{formats.utcoffset(now)}`\n"
+                f"### Current Local Time\n`{formats.dt_full(now)}`"
             )
             await interaction.followup.send(
                 embed=await success("Success", description=desc)
@@ -161,7 +162,3 @@ class Profile(commands.Cog):
             await interaction.followup.send(
                 embed=await fail("Error while saving", description=str(ex))
             )
-
-
-async def setup(bot: SkyBot):
-    await bot.add_cog(Profile(bot))

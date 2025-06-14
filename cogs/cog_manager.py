@@ -1,6 +1,6 @@
 from discord.ext import commands
 
-from ..utils import code_block
+from .helper.formats import code_block
 
 __all__ = ("CogManager",)
 
@@ -9,8 +9,8 @@ _cogs_dict = {}
 
 class ExtName:
     @classmethod
-    async def convert(cls, ctx, ext_name):
-        return "sky_bot.cogs." + ext_name
+    async def convert(cls, ctx, ext_name: str):
+        return "cogs." + ext_name
 
     @classmethod
     def get_root(cls, ext_name: str):
@@ -67,8 +67,9 @@ class CogManager(commands.Cog):
     @reload.error
     async def load_error(self, ctx: commands.Context, error):
         error = error.original
-        if isinstance(error, commands.ExtensionError):
-            ext_name = ExtName.get_root(error.name)
+        if not isinstance(error, commands.ExtensionError):
+            return
+        ext_name = ExtName.get_root(error.name)
         if isinstance(error, commands.ExtensionNotFound):
             # 找不到扩展文件或无法导入
             await ctx.send(f"`No extension named {ext_name} found.`")

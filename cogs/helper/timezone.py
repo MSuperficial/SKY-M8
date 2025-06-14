@@ -16,6 +16,7 @@ country_timezones: dict[str, list[str]] = {}
 for k, v in pytz.country_timezones.items():
     name = pytz.country_names[k]
     country_timezones[name] = v
+
 timezone_country: dict[str, str] = {}
 for k, v in country_timezones.items():
     for x in v:

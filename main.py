@@ -7,8 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from sky_bot.mentionable_tree import MentionableTree
-from sky_bot.sky_bot import SkyBot
+from sky_bot import MentionableTree, SkyBot
 
 if os.name == "nt":
     policy = asyncio.WindowsSelectorEventLoopPolicy()
@@ -25,12 +24,11 @@ async def main():
     intents.message_content = True
 
     initial_extensions = [
-        "profile",
+        "info",
         "tools",
-        "greeting",
+        "welcome",
         "role_manager",
-        "daily_clock",
-        "shard_calendar",
+        "sky_events",
     ]
 
     bot = SkyBot(
