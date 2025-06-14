@@ -111,7 +111,8 @@ class LiveUpdateCog(commands.Cog):
                 # 如果live消息被删除，则同时删除webhook
                 try:
                     self.live_webhooks.remove(lw)
-                    await remote_config.set_list(self._WEBHOOKS_KEY, self.live_webhooks)
+                    data = [w.to_dict() for w in self.live_webhooks]
+                    await remote_config.set_list(self._WEBHOOKS_KEY, data)
                     with suppress(discord.NotFound):
                         await lw.webhook.delete(reason="Live message was deleted.")
                     print(
@@ -214,7 +215,8 @@ class LiveUpdateCog(commands.Cog):
                             reason=f"Removed by {user.name}:{user.id}."
                         )
                     self.live_webhooks.remove(lw)
-                    await remote_config.set_list(self._WEBHOOKS_KEY, self.live_webhooks)
+                    data = [w.to_dict() for w in self.live_webhooks]
+                    await remote_config.set_list(self._WEBHOOKS_KEY, data)
                     print(
                         f"[{sky_time_now()}] {self._DISPLAY_NAME} live message removed by {user.name}:{user.id}.\n"
                         f"{lw.message.jump_url}."
