@@ -1,7 +1,7 @@
 import asyncio
-from contextlib import suppress
 import json
 import os
+from contextlib import suppress
 from typing import Any, NamedTuple
 
 import discord
@@ -20,12 +20,6 @@ __all__ = ("LiveUpdateCog",)
 class LiveUpdateCog(commands.Cog):
     _WEBHOOKS_KEY = "liveUpdate.webhooks"
     _DISPLAY_NAME = "Live Update"
-    group_live = app_commands.Group(
-        name="live",
-        description="Commands to manage live message.",
-        allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
-        allowed_installs=app_commands.AppInstallationType(user=False),
-    )
 
     def __init_subclass__(
         cls,
@@ -38,12 +32,43 @@ class LiveUpdateCog(commands.Cog):
     ):
         super().__init_subclass__(**kwargs)
         cls._WEBHOOKS_KEY = live_key
-        cls.group_live.name = group_live_name
-        cls.group_live.description = f"Commands to manage {live_display_name} live message."  # fmt: skip
         cls._DISPLAY_NAME = live_display_name
-        cls.live_setup.description = f"Setup {live_display_name} live message in this server."  # fmt: skip
-        cls.live_remove.description = f"Remove {live_display_name} live message in this server."  # fmt: skip
-        cls.update_live_msg.change_interval(**live_update_interval)
+
+        # 每个子类在初始化时需要创建以下对象新的实例
+        # 否则会共用同一个实例可能导致问题
+
+        # 创建新命令对象
+        cls.live_setup = app_commands.Command(
+            name="setup",
+            description=f"Setup {live_display_name} live message in this server.",
+            callback=cls._live_setup_impl,
+        )
+        app_commands.describe(
+            channel="Where to send the live message.",
+        )(cls.live_setup)
+        cls.live_removve = app_commands.Command(
+            name="remove",
+            description=f"Remove {live_display_name} live message in this server.",
+            callback=cls._live_remove_impl,
+        )
+
+        # 创建新命令组并添加命令
+        cls.group_live = app_commands.Group(
+            name=group_live_name,
+            description=f"Commands to manage {live_display_name} live message.",
+            allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
+            allowed_installs=app_commands.AppInstallationType(user=False),
+        )
+        cls.group_live.add_command(cls.live_setup)
+        cls.group_live.add_command(cls.live_removve)
+
+        # 创建新任务对象
+        cls.update_live_msg = tasks.loop(
+            **live_update_interval,
+            name=f"update_live_msg[{live_display_name}]",
+        )(cls.update_live_msg.coro)
+        cls.update_live_msg.before_loop(cls._task_live_before)
+        cls.update_live_msg.error(cls._task_live_error)
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
@@ -94,9 +119,7 @@ class LiveUpdateCog(commands.Cog):
                 except Exception as ex:
                     print(f"[{sky_time_now()}] Error deleting live webhook: {ex}")
 
-    @group_live.command(name="setup")
-    @app_commands.describe(channel="Where to send the live message.")
-    async def live_setup(
+    async def _live_setup_impl(
         self,
         interaction: Interaction,
         channel: discord.TextChannel | None = None,  # type: ignore
@@ -158,8 +181,7 @@ class LiveUpdateCog(commands.Cog):
         except Exception as ex:
             await followup.edit(embed=await fail("Error", description=str(ex)))
 
-    @group_live.command(name="remove")
-    async def live_remove(self, interaction: Interaction):
+    async def _live_remove_impl(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         # 如果当前服务器还未配置live消息则返回
         if not (lw := get(self.live_webhooks, message__guild=interaction.guild)):
@@ -266,8 +288,7 @@ class LiveUpdateCog(commands.Cog):
         """Stuff to do before live update task starts."""
         pass
 
-    @update_live_msg.before_loop
-    async def task_live_before(self):
+    async def _task_live_before(self):
         # 等待客户端就绪
         await self.bot.wait_until_ready()
         # 先更新一次
@@ -275,9 +296,8 @@ class LiveUpdateCog(commands.Cog):
         # 准备就绪
         await self.get_ready_for_live()
 
-    @update_live_msg.error
-    async def task_live_error(self, error):
-        task_name = self.update_live_msg.coro.__name__
+    async def _task_live_error(self, error):
+        task_name = self.update_live_msg._name
         error_msg = (
             f"Error during task `{task_name}`: `{type(error).__name__}`\n"
             f"{code_block(error)}"
