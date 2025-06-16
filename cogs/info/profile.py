@@ -18,12 +18,12 @@ from ..helper.tzutils import (
 from .views import TimezoneDisplay
 
 __all__ = (
+    "UserProfileData",
     "UserProfile",
-    "Profile",
 )
 
 
-class UserProfile(NamedTuple):
+class UserProfileData(NamedTuple):
     private: bool
     timezone: ZoneInfo | None
 
@@ -42,7 +42,7 @@ class FieldTransformer(app_commands.Transformer):
         return value
 
 
-class Profile(commands.Cog):
+class UserProfile(commands.Cog):
     _PROFILE_KEY = "userProfile"
     group_profile = app_commands.Group(
         name="profile",
@@ -59,13 +59,13 @@ class Profile(commands.Cog):
         timezone = None
         if obj["timezone"] in tzutils.valid_timezones:
             timezone = ZoneInfo(obj["timezone"])
-        return UserProfile(
+        return UserProfileData(
             private=obj["private"],
             timezone=timezone,
         )
 
     @classmethod
-    async def user_fields(cls, user_id: int, *fields: str):
+    async def fields(cls, user_id: int, *fields: str):
         paths = [[user_id, f] for f in fields]
         values = await remote_config.get_json_m(cls._PROFILE_KEY, *paths)
         return values

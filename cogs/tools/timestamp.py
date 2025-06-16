@@ -17,7 +17,7 @@ from ..helper.tzutils import (
     format_hint,
     tz_autocomplete,
 )
-from ..info.profile import Profile
+from ..info.profile import UserProfile
 
 __all__ = ("TimestampMaker",)
 
@@ -60,7 +60,7 @@ class TimestampMaker(commands.Cog):
                 return
         elif others:
             # 获取指定用户的时区
-            private, tz = await Profile.user_fields(others.id, "private", "timezone")  # type: ignore
+            private, tz = await UserProfile.fields(others.id, "private", "timezone")  # type: ignore
             if not private and tz:
                 tzinfo = ZoneInfo(tz)
             else:
@@ -73,11 +73,11 @@ class TimestampMaker(commands.Cog):
                 return
         else:
             # 获取当前用户的时区
-            tz: str = await Profile.user_fields(interaction.user.id, "timezone")  # type: ignore
+            tz: str = await UserProfile.fields(interaction.user.id, "timezone")  # type: ignore
             if tz:
                 tzinfo = ZoneInfo(tz)
             else:
-                cmd = await self.bot.tree.find_mention_for(Profile.profile_timezone)  # type: ignore
+                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)  # type: ignore
                 await interaction.followup.send(
                     embed=await fail(
                         "No time zone",

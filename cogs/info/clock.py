@@ -8,7 +8,7 @@ from discord.ext import commands
 from sky_bot import SkyBot
 
 from ..helper.embeds import fail
-from .profile import Profile
+from .profile import UserProfile
 from .views import TimezoneDisplay
 
 
@@ -37,20 +37,20 @@ class Clock(commands.Cog):
     async def _view_someones_clock(self, interaction: Interaction, who: discord.User):
         await interaction.response.defer(ephemeral=True)
         user = interaction.user
-        private, tz = await Profile.user_fields(who.id, "private", "timezone")  # type: ignore
+        private, tz = await UserProfile.fields(who.id, "private", "timezone")  # type: ignore
         # 两种情况下无效：查看对象是别人但其资料设置为private，或时区信息没有设置
         if (who != user and private) or not tz:
             desc = f"User {who.mention} does not provide time zone."
             if who == user:
                 # 如果是用户自己的时区没设置，提醒通过指定的命令添加
-                cmd = await self.bot.tree.find_mention_for(Profile.profile_timezone)  # type: ignore
+                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)  # type: ignore
                 desc += f"\nUse {cmd} to save your default time zone."
             await interaction.followup.send(
                 embed=await fail("No time zone", description=desc)
             )
             return
         tzinfo = ZoneInfo(tz)
-        user_tz: str | None = await Profile.user_fields(user.id, "timezone")  # type: ignore
+        user_tz: str | None = await UserProfile.fields(user.id, "timezone")  # type: ignore
         display = TimezoneDisplay()
         # 只有在查看对象是别人，且用户自己设置了时区时，才显示时差信息
         if who != user and user_tz:
@@ -96,7 +96,7 @@ class Clock(commands.Cog):
             return
         # 第一个用户的时区作为基准，必须不为空
         base = users[0]
-        pri, tz = await Profile.user_fields(base.id, "private", "timezone")  # type: ignore
+        pri, tz = await UserProfile.fields(base.id, "private", "timezone")  # type: ignore
         if (base != interaction.user and pri) or not tz:
             await interaction.followup.send(
                 embed=await fail(
@@ -133,7 +133,7 @@ class ClockCompareView(ui.View):
     async def create_message(self) -> dict[str, Any]:
         infos = []
         for u in self.extras:
-            pri, tz = await Profile.user_fields(u.id, "private", "timezone")  # type: ignore
+            pri, tz = await UserProfile.fields(u.id, "private", "timezone")  # type: ignore
             infos.append((u, ZoneInfo(tz) if not pri and tz else None))
         infos.insert(0, (self.base, self.base_tz))
         display = TimezoneDisplay()
