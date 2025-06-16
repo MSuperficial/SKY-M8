@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from sky_bot import SkyBot
 
+from ..base.views import AutoDisableView
 from ..helper.embeds import fail
 from .profile import UserProfile
 from .views import TimezoneDisplay
@@ -109,14 +110,18 @@ class Clock(commands.Cog):
         msg_data = await view.create_message()
         if public:
             # 公开情况下，使用channel.send发送消息，但仍隐藏选择框
-            msg = await interaction.channel.send(**msg_data)  # type: ignore
-            await interaction.followup.send(view=view)
+            clock_msg = await interaction.channel.send(**msg_data)  # type: ignore
+            response_msg = await interaction.followup.send(view=view)
         else:
-            msg = await interaction.followup.send(**msg_data, view=view)
-        view.message = msg
+            clock_msg = response_msg = await interaction.followup.send(
+                **msg_data,
+                view=view,
+            )
+        view.clock_msg = clock_msg
+        view.response_msg = response_msg
 
 
-class ClockCompareView(ui.View):
+class ClockCompareView(AutoDisableView):
     def __init__(
         self,
         base: discord.User,
@@ -128,7 +133,7 @@ class ClockCompareView(ui.View):
         self.base_tz = base_tz
         self.extras = extras
         self.select_users.default_values = extras
-        self.message: discord.Message
+        self.clock_msg: discord.Message
 
     async def create_message(self) -> dict[str, Any]:
         infos = []
@@ -158,4 +163,4 @@ class ClockCompareView(ui.View):
             return
         self.extras = users
         msg_data = await self.create_message()
-        await self.message.edit(**msg_data)
+        await self.clock_msg.edit(**msg_data)

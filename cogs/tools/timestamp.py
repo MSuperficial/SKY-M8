@@ -9,7 +9,7 @@ from discord.utils import TimestampStyle, format_dt
 
 from sky_bot import SkyBot
 
-from ..base.views import DateModal, TimeModal, TimeZoneModal
+from ..base.views import AutoDisableView, DateModal, TimeModal, TimeZoneModal
 from ..helper import formats, tzutils
 from ..helper.embeds import fail
 from ..helper.tzutils import (
@@ -91,13 +91,14 @@ class TimestampMaker(commands.Cog):
         now = datetime.now(tzinfo)
         view = TimestampView(datetime=now)
         msg_data = view.create_message()
-        await interaction.followup.send(
+        msg = await interaction.followup.send(
             **msg_data,
             view=view,
         )
+        view.response_msg = msg
 
 
-class TimestampView(ui.View):
+class TimestampView(AutoDisableView):
     def __init__(self, *, datetime: datetime):
         super().__init__(timeout=300)
         self.dt = datetime

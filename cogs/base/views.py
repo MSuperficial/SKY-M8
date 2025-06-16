@@ -1,10 +1,25 @@
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from discord import Interaction, TextStyle, ui
+from discord import Interaction, Message, TextStyle, ui
 
 from ..helper.embeds import fail
 from ..helper.tzutils import TimezoneFinder, format_hint
+
+
+class AutoDisableView(ui.View):
+    def __init__(self, *, timeout: float | None = 180):
+        super().__init__(timeout=timeout)
+        self.response_msg: Message | None = None
+
+    async def on_timeout(self) -> None:
+        if self.response_msg:
+            # 禁用所有UI
+            for item in self.children:
+                if isinstance(item, ui.DynamicItem):
+                    item = item.item
+                item.disabled = True  # type: ignore
+            await self.response_msg.edit(view=self)
 
 
 class EmptyModal(ui.Modal):

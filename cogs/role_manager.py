@@ -12,7 +12,7 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
-from .base.views import LongTextModal, ShortTextModal
+from .base.views import AutoDisableView, LongTextModal, ShortTextModal
 from .helper.converters import MessageTransformer
 from .helper.embeds import fail, success
 
@@ -37,7 +37,13 @@ class RoleManager(commands.Cog):
     async def autoroles_setup(self, interaction: discord.Interaction):
         embed = Embed(color=discord.Color.blue(), title="Setup Autoroles")
         view = AutoRolesSetupView()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        callback = await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+        )
+        if isinstance(callback.resource, discord.InteractionMessage):
+            view.response_msg = callback.resource
 
     @group_autoroles.command(
         name="edit",
@@ -57,10 +63,11 @@ class RoleManager(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         view = AutoRolesSetupView.edit_message(message)
         embed = view.create_embed()
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        msg = await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        view.response_msg = msg
 
 
-class AutoRolesSetupView(ui.View):
+class AutoRolesSetupView(AutoDisableView):
     def __init__(self, *, timeout=600):
         super().__init__(timeout=timeout)
         self.title: str = ""

@@ -9,7 +9,7 @@ from discord.ext import commands, tasks
 from sky_bot import SkyBot
 from utils.remote_config import remote_config
 
-from .base.views import LongTextModal, ShortTextModal
+from .base.views import AutoDisableView, LongTextModal, ShortTextModal
 from .helper.embeds import fail, success
 from .helper.var_parser import VarParser
 
@@ -123,7 +123,8 @@ class Welcome(commands.Cog):
         builder = WelcomeMessageBuilder(VarParser.from_interaction(interaction))
         msg_data = builder.build(msg_obj)
         view = WelcomeMessageView(msg_obj=msg_obj, builder=builder)
-        await interaction.followup.send(**msg_data, view=view)
+        msg = await interaction.followup.send(**msg_data, view=view)
+        view.response_msg = msg
 
     @group_welcome.command(
         name="image",
@@ -215,10 +216,11 @@ class Welcome(commands.Cog):
         # 获取有效角色
         roles = await self.fetch_valid_welcome_roles(guild)
         view = WelcomeRolesView(default_roles=roles)
-        await interaction.followup.send(
+        msg = await interaction.followup.send(
             content="### Select default roles for new member:",
             view=view,
         )
+        view.response_msg = msg
 
     @group_welcome.command(name="preview", description="Preview welcome message for selected member.")  # fmt: skip
     @app_commands.describe(
@@ -278,7 +280,7 @@ class WelcomeMessageBuilder:
         }
 
 
-class WelcomeMessageView(ui.View):
+class WelcomeMessageView(AutoDisableView):
     def __init__(self, *, msg_obj: dict[str, Any], builder: WelcomeMessageBuilder):
         super().__init__(timeout=900)
         self.add_item(
@@ -428,7 +430,7 @@ class WelcomeMessageView(ui.View):
             )
 
 
-class WelcomeRolesView(ui.View):
+class WelcomeRolesView(AutoDisableView):
     def __init__(self, *, default_roles: list[discord.Role] = []):
         super().__init__(timeout=300)
         self.select_roles.default_values = default_roles

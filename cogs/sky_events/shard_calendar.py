@@ -14,6 +14,7 @@ from sky_bot import SkyBot
 from utils.remote_config import remote_config
 
 from ..base.live_update import LiveUpdateCog
+from ..base.views import AutoDisableView
 from ..helper.converters import DateTransformer, date_autocomplete
 from ..helper.embeds import fail, success
 from ..helper.times import sky_datetime, sky_time, sky_time_now
@@ -109,7 +110,9 @@ class ShardCalendar(
     async def shards(self, interaction: Interaction, private: bool = True):
         await interaction.response.defer(ephemeral=private, thinking=True)
         msg_data = await self.get_live_message_data(persistent=False)
-        await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        view: ShardNavView = msg_data["view"]
+        view.response_msg = msg
 
     @group_shard.command(name="date", description="View shards info of specific date.")
     @app_commands.describe(
@@ -132,7 +135,9 @@ class ShardCalendar(
             )
             return
         msg_data = await self.get_live_message_data(date=date, persistent=False)
-        await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        view: ShardNavView = msg_data["view"]
+        view.response_msg = msg
 
     @group_shard.command(name="offset", description="View shards info relative to today.")  # fmt: skip
     @app_commands.describe(
@@ -149,7 +154,9 @@ class ShardCalendar(
         now = sky_time_now()
         date = now + timedelta(days=days)
         msg_data = await self.get_live_message_data(date=date, persistent=False)
-        await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        view: ShardNavView = msg_data["view"]
+        view.response_msg = msg
 
     @group_shard.command(name="record", description="Record shards info of a specific date.")  # fmt: skip
     @app_commands.describe(
@@ -384,7 +391,7 @@ class ShardEmbedBuilder:
                 embeds.append(memory_embed)
 
 
-class ShardNavView(ui.View):
+class ShardNavView(AutoDisableView):
     def __init__(
         self,
         date: datetime,
@@ -393,7 +400,7 @@ class ShardNavView(ui.View):
         persistent: bool = False,
     ):
         # persistent 除了影响UI是否持久化，还会影响按钮交互的回复方式
-        super().__init__(timeout=None if persistent else 900)
+        super().__init__(timeout=None if persistent else 600)
         _reload_shard_config()
         emojis = _config("emojis")
         now = sky_time_now()
@@ -471,7 +478,12 @@ class ShardNavButton(
         # 如果是持久化的按钮，则新发送一条消息，否则编辑原消息
         # 目前持久化的按钮在实时更新的消息中使用，其消息由task负责更新，因此不应该在这里编辑
         if self.persistent:
-            await interaction.followup.send(embeds=embeds, view=view, ephemeral=True)
+            msg = await interaction.followup.send(
+                embeds=embeds,
+                view=view,
+                ephemeral=True,
+            )
+            view.response_msg = msg
         else:
             await interaction.edit_original_response(embeds=embeds, view=view)
 
