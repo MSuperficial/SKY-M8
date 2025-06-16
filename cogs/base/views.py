@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from discord import Interaction, TextStyle, ui
 
 from ..helper.embeds import fail
-from ..helper.timezone import TimezoneFinder, format_hint
+from ..helper.tzutils import TimezoneFinder, format_hint
 
 
 class EmptyModal(ui.Modal):

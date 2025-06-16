@@ -1,8 +1,6 @@
-from datetime import datetime
 from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
-import pytz
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.app_commands import Choice
 from discord.ext import commands
@@ -10,9 +8,14 @@ from discord.ext import commands
 from sky_bot import SkyBot
 from utils.remote_config import remote_config
 
-from ..helper import formats
+from ..helper import tzutils
 from ..helper.embeds import fail, success
-from ..helper.timezone import TimezoneFinder, format_hint, tz_autocomplete
+from ..helper.tzutils import (
+    TimezoneFinder,
+    format_hint,
+    tz_autocomplete,
+)
+from .views import TimezoneDisplay
 
 __all__ = (
     "UserProfile",
@@ -54,7 +57,7 @@ class Profile(commands.Cog):
         if not obj:
             return None
         timezone = None
-        if obj["timezone"] in pytz.common_timezones:
+        if obj["timezone"] in tzutils.valid_timezones:
             timezone = ZoneInfo(obj["timezone"])
         return UserProfile(
             private=obj["private"],
@@ -140,7 +143,6 @@ class Profile(commands.Cog):
                 content=hint,
                 embed=embed,
                 view=view,
-                ephemeral=True,
             )
             return
         user = interaction.user
@@ -148,16 +150,9 @@ class Profile(commands.Cog):
         try:
             await remote_config.set_json(self._PROFILE_KEY, user.id, "timezone", value=timezone)  # fmt: skip
             # 展示当前时区信息
-            tz = ZoneInfo(timezone)
-            now = datetime.now(tz)
-            desc = (
-                f"### Your Time Zone\n`{timezone}`\n"
-                f"### UTC Offset\n`{formats.utcoffset(now)}`\n"
-                f"### Current Local Time\n`{formats.dt_full(now)}`"
-            )
-            await interaction.followup.send(
-                embed=await success("Success", description=desc)
-            )
+            display = TimezoneDisplay()
+            embed = display.embed(user, ZoneInfo(timezone))
+            await interaction.followup.send(embed=embed)
         except Exception as ex:
             await interaction.followup.send(
                 embed=await fail("Error while saving", description=str(ex))

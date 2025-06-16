@@ -39,8 +39,24 @@ def utcoffset(dt: datetime):
     return offset
 
 
+def tzdiff(base: datetime, other: datetime):
+    this_utc = base.utcoffset()
+    that_utc = other.utcoffset()
+    delta = that_utc - this_utc  # type: ignore
+    minutes = int(delta.total_seconds() / 60)
+    sign = "+" if minutes > 0 else "-"
+    hours, minutes = divmod(abs(minutes), 60)
+    diff = f"{sign}{hours:0>2d}:{minutes:0>2d}"
+    return diff
+
+
 def dt_full(dt: datetime):
-    dt_str = dt.strftime("%Y/%m/%d %A %H:%M:%S")
+    dt_str = dt.strftime("%Y/%m/%d %H:%M:%S %A")
+    return dt_str
+
+
+def dt_short(dt: datetime):
+    dt_str = dt.strftime("%m/%d %H:%M")
     return dt_str
 
 

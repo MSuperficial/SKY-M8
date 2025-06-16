@@ -5,12 +5,15 @@ from thefuzz import process
 from thefuzz.utils import full_process
 
 __all__ = (
+    "valid_timezones",
     "country_timezones",
     "timezone_country",
     "TimezoneFinder",
     "format_hint",
     "tz_autocomplete",
 )
+
+valid_timezones = pytz.common_timezones
 
 country_timezones: dict[str, list[str]] = {}
 for k, v in pytz.country_timezones.items():
@@ -96,7 +99,7 @@ async def tz_autocomplete(interaction: Interaction, value: str):
     matches = TimezoneFinder.best_matches(value, limit=10)
     choices = [
         Choice(
-            name=f"{tz} -- {c}" if c else tz,
+            name=f"{tz}, {c}" if c else tz,
             value=tz,
         )
         for tz, c in matches

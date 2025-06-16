@@ -10,12 +10,11 @@ from discord.utils import TimestampStyle, format_dt
 from sky_bot import SkyBot
 
 from ..base.views import DateModal, TimeModal, TimeZoneModal
-from ..helper import formats
+from ..helper import formats, tzutils
 from ..helper.embeds import fail
-from ..helper.timezone import (
+from ..helper.tzutils import (
     TimezoneFinder,
     format_hint,
-    timezone_country,
     tz_autocomplete,
 )
 from ..info.profile import Profile
@@ -105,7 +104,7 @@ class TimestampView(ui.View):
 
     def create_message(self) -> dict[str, Any]:
         tz: ZoneInfo = self.dt.tzinfo  # type: ignore
-        country = timezone_country.get(tz.key)
+        country = tzutils.timezone_country.get(tz.key)
         selected = (
             "## Selected Date and Time\n"
             f"`{formats.dt_full(self.dt)}`\n"
