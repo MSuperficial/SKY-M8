@@ -43,7 +43,7 @@ class Clock(commands.Cog):
             desc = f"User {who.mention} does not provide time zone."
             if who == user:
                 # 如果是用户自己的时区没设置，提醒通过指定的命令添加
-                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)  # type: ignore
+                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)
                 desc += f"\nUse {cmd} to save your default time zone."
             await interaction.followup.send(
                 embed=await fail("No time zone", description=desc)

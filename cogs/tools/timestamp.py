@@ -77,7 +77,7 @@ class TimestampMaker(commands.Cog):
             if tz:
                 tzinfo = ZoneInfo(tz)
             else:
-                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)  # type: ignore
+                cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)
                 await interaction.followup.send(
                     embed=await fail(
                         "No time zone",

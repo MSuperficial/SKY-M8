@@ -10,8 +10,8 @@ from discord.utils import MISSING
 from cogs.cog_manager import CogManager
 
 __all__ = (
-    "SkyBot",
     "MentionableTree",
+    "SkyBot",
 )
 
 _log = getLogger(__name__)
@@ -41,6 +41,10 @@ class SkyBot(commands.Bot):
         print(f"We have logged in as {self.user}")
 
     @property
+    def tree(self) -> "MentionableTree":
+        return super().tree  # type: ignore
+
+    @property
     def owner(self):
         if not self._owner:
             self._owner = self.get_user(self.owner_id)  # type: ignore
@@ -58,7 +62,7 @@ class SkyBot(commands.Bot):
 
 
 # fmt: off
-class MentionableTree(app_commands.CommandTree):
+class MentionableTree(app_commands.CommandTree[SkyBot]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.application_commands: dict[Optional[int], List[app_commands.AppCommand]] = {}
