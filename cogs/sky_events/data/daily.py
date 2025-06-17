@@ -93,7 +93,7 @@ _daily_event_data = {
 
 async def fetch_displayed_events():
     events: list[str] = _default_events
-    value = await remote_config.get_field(_EVENTS_KEY, "displayed_events")
+    value = await remote_config.get_field(_EVENTS_KEY, "displayedEvents")
     if value:
         events = json.loads(value)
     return events
@@ -102,7 +102,7 @@ async def fetch_displayed_events():
 async def fetch_all_event_data():
     data = _daily_event_data.copy()
     overrides: dict[str, dict] = {}
-    value = await remote_config.get_field(_EVENTS_KEY, "event_data_overrides")
+    value = await remote_config.get_field(_EVENTS_KEY, "eventDataOverrides")
     if value:
         overrides = json.loads(value)
     for k, v in overrides.items():
