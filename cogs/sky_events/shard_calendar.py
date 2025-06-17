@@ -51,10 +51,6 @@ def _config(key):
     return val
 
 
-def shard_extra_key(date: datetime):
-    return f"shard.extra.{date:%Y%m%d}"
-
-
 class ShardCalendar(
     LiveUpdateCog,
     live_key="shardCalendar.webhooks",
@@ -65,6 +61,20 @@ class ShardCalendar(
         name="shard",
         description="A group of commands to view and config shards information.",
     )
+
+    @classmethod
+    async def set_extra_info(cls, date: datetime, info: ShardExtra):
+        field = f"{date:%Y/%m/%d}"
+        await remote_config.set_field("shard.extra", field, info.to_dict())
+
+    @classmethod
+    async def get_extra_info(cls, date: datetime):
+        field = f"{date:%Y/%m/%d}"
+        value = await remote_config.get_field("shard.extra", field)
+        if not value:
+            return None
+        info = ShardExtra.from_dict(json.loads(value))
+        return info
 
     def __init__(self, bot: SkyBot):
         super().__init__(bot)
@@ -95,7 +105,9 @@ class ShardCalendar(
     ):
         date = date or sky_time_now()
         builder = ShardEmbedBuilder(self.bot)
-        embeds = await builder.build_embed(date)
+        info = get_shard_info(date)
+        extra = await self.get_extra_info(date)
+        embeds = builder.build_embed(info, extra)
         # 实时消息不显示跳转今天按钮，且设置为持久化
         view = ShardNavView(date, show_today=not persistent, persistent=persistent)
         return {
@@ -174,15 +186,15 @@ class ShardCalendar(
     ):
         await interaction.response.defer(ephemeral=True, thinking=True)
         tsfm = DateTransformer()
-        date_ = await tsfm.transform(interaction, date)
+        dt = await tsfm.transform(interaction, date)
         # 日期格式错误
-        if not date_:
+        if not dt:
             await interaction.followup.send(
                 embed=await fail("Date format error"),
                 ephemeral=True,
             )
             return
-        info = get_shard_info(date_)
+        info = get_shard_info(dt)
         if not info.has_shard:
             # 当日没有碎石事件
             await interaction.followup.send(
@@ -198,16 +210,14 @@ class ShardCalendar(
             )
             return
         try:
-            await remote_config.set_obj(
-                shard_extra_key(date_),
-                ShardExtra(
-                    has_memory=True,
-                    memory_type=memory,
-                    memory_user=interaction.user.id,
-                    memory_by=author.strip(),
-                    memory_timestamp=interaction.created_at.timestamp(),
-                ),
+            extra = ShardExtra(
+                has_memory=True,
+                memory_type=memory,
+                memory_user=interaction.user.id,
+                memory_by=author.strip(),
+                memory_timestamp=interaction.created_at.timestamp(),
             )
+            await self.set_extra_info(dt, extra)
             # 成功记录
             await interaction.followup.send(
                 embed=await success("Successfully recorded"),
@@ -309,9 +319,8 @@ class ShardEmbedBuilder:
         field = " ".join(days_symbol)
         return field
 
-    async def build_embed(self, date: datetime, now=None):
+    def build_embed(self, info: ShardInfo, extra: ShardExtra | None, now=None):
         embeds: list[discord.Embed] = []
-        info = get_shard_info(date)
         emojis = _config("emojis")
         graph = _config("infographics")
         if info.has_shard:
@@ -338,8 +347,7 @@ class ShardEmbedBuilder:
                 .set_image(url=graph.get(".".join([info.realm, info.map])))
             )
             embeds.append(basic_embed)
-            extra_key = shard_extra_key(date)
-            await self._add_memory_info(embeds, info, extra_key)
+            self._add_memory_info(embeds, info, extra)
         else:
             basic_embed = (
                 discord.Embed(
@@ -355,40 +363,39 @@ class ShardEmbedBuilder:
             embeds.append(basic_embed)
         return embeds
 
-    async def _add_memory_info(self, embeds: list[discord.Embed], info: ShardInfo, key):
+    def _add_memory_info(
+        self,
+        embeds: list[discord.Embed],
+        info: ShardInfo,
+        extra: ShardExtra | None,
+    ):
+        if info.type != ShardType.Red:
+            return
         emojis = _config("emojis")
         graph = _config("infographics")
-        basic_embed = embeds[0]
-        if info.type == ShardType.Red:
-            # 显示Shard Memory信息
-            extra = await remote_config.get_obj(ShardExtra, key)
-            memory_available = extra and extra.has_memory
-            memory_name = (
-                extra.memory_type.name if memory_available else "*Unknown yet*"
-            )
-            basic_embed.insert_field_at(
-                1,
-                name=emojis.get("Memory", "💠") + " " + "__Memory__",
-                value=memory_name,
-                inline=True,
-            )
+        title = emojis.get("Memory", "💠") + " " + "__Memory__"
+        # 显示Shard Memory信息
+        if not (extra and extra.has_memory):
+            embeds[0].insert_field_at(1, name=title, value="*Unknown yet*", inline=True)
+        else:
+            memory = extra.memory_type
+            embeds[0].insert_field_at(1, name=title, value=memory.name, inline=True)
             # 显示Shard Memory图片
-            if memory_available:
-                memory_embed = discord.Embed(
-                    color=self._embed_color(info),
-                    title=f"{emojis.get('Crystal', '💠')} Shard Memory [{memory_name}]",
-                ).set_image(url=graph.get(f"memory.{extra.memory_type.value}"))
-                # 展示提交者信息
-                author = self.bot.get_user(extra.memory_user)
-                if author:
-                    memory_embed.set_footer(
-                        text=f"Submitted by {extra.memory_by.strip() or author.display_name}",
-                        icon_url=author.display_avatar.url,
-                    )
-                    memory_embed.timestamp = datetime.fromtimestamp(
-                        extra.memory_timestamp
-                    )
-                embeds.append(memory_embed)
+            memory_embed = discord.Embed(
+                color=self._embed_color(info),
+                title=f"{emojis.get('Crystal', '💠')} Shard Memory [{memory.name}]",
+            ).set_image(
+                url=graph.get(f"memory.{memory.value}"),
+            )
+            # 展示提交者信息
+            author = self.bot.get_user(extra.memory_user)
+            if author:
+                memory_embed.set_footer(
+                    text=f"Submitted by {extra.memory_by.strip() or author.display_name}",
+                    icon_url=author.display_avatar.url,
+                )
+                memory_embed.timestamp = datetime.fromtimestamp(extra.memory_timestamp)
+            embeds.append(memory_embed)
 
 
 class ShardNavView(AutoDisableView):
@@ -473,7 +480,9 @@ class ShardNavButton(
         else:
             date = sky_time_now()
         builder = ShardEmbedBuilder(interaction.client)  # type: ignore
-        embeds = await builder.build_embed(date)
+        info = get_shard_info(date)
+        extra = await ShardCalendar.get_extra_info(date)
+        embeds = builder.build_embed(info, extra)
         view = ShardNavView(date)
         # 如果是持久化的按钮，则新发送一条消息，否则编辑原消息
         # 目前持久化的按钮在实时更新的消息中使用，其消息由task负责更新，因此不应该在这里编辑

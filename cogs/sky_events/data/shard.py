@@ -168,18 +168,18 @@ class ShardExtra(NamedTuple):
     @classmethod
     def from_dict(cls, value: dict):
         return ShardExtra(
-            has_memory=True if value["hasMemory"] == "true" else False,
-            memory_type=MemoryType(int(value["memoryType"])),
+            has_memory=value["hasMemory"],
+            memory_type=MemoryType(value["memoryType"]),
             memory_user=int(value["memoryUser"]),
             memory_by=value["memoryBy"],
-            memory_timestamp=float(value["memoryTimestamp"]),
+            memory_timestamp=value["memoryTimestamp"],
         )
 
     def to_dict(self):
         return {
-            "hasMemory": str(self.has_memory).lower(),
-            "memoryType": str(self.memory_type.value),
+            "hasMemory": self.has_memory,
+            "memoryType": self.memory_type.value,
             "memoryUser": str(self.memory_user),
             "memoryBy": self.memory_by,
-            "memoryTimestamp": str(self.memory_timestamp),
+            "memoryTimestamp": self.memory_timestamp,
         }
