@@ -1,12 +1,11 @@
 import json
-import os
 import re
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
-from discord.ext import tasks
+from discord.ext import commands, tasks
 from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
@@ -15,6 +14,7 @@ from utils.remote_config import remote_config
 
 from ..base.live_update import LiveUpdateCog
 from ..base.views import AutoDisableView
+from ..emoji_manager import Emojis
 from ..helper.converters import DateTransformer, date_autocomplete
 from ..helper.embeds import fail, success
 from ..helper.times import sky_datetime, sky_time, sky_time_now
@@ -29,26 +29,7 @@ from .data.shard import (
 __all__ = ("ShardCalendar",)
 
 
-_CONFIG_PATH_ = "extern_config/shard.json"
-_shard_config = {}
-
-
-def _reload_shard_config():
-    # 加载外部配置
-    global _shard_config
-    if os.path.exists(_CONFIG_PATH_):
-        with open(_CONFIG_PATH_, encoding="utf-8") as f:
-            _shard_config = json.load(f)
-    else:
-        _shard_config = {}
-
-
-def _config(key):
-    # 获取配置项
-    val = _shard_config.get(key, {})
-    if _shard_config == {} and key == "translations":
-        val = _default_translation
-    return val
+shard_cfg: dict[str, Any] = {}
 
 
 class ShardCalendar(
@@ -57,6 +38,7 @@ class ShardCalendar(
     group_live_name="shard-live",
     live_display_name="Shard Calendar",
 ):
+    _CONFIG_KEY = "shardCalendar.config"
     group_shard = app_commands.Group(
         name="shard",
         description="A group of commands to view and config shards information.",
@@ -76,14 +58,34 @@ class ShardCalendar(
         info = ShardExtra.from_dict(json.loads(value))
         return info
 
+    @classmethod
+    async def get_config(cls):
+        config: dict[str, Any] = await remote_config.get_json(cls._CONFIG_KEY)  # type: ignore
+
+        trans = _default_translation | config.get("translations", {})
+        config["translations"] = trans
+
+        emoji_mapping: dict[str, str] = config["emojis"]
+        emoji_override = {k: Emojis(v, v) for k, v in emoji_mapping.items()}
+        emojis = Emojis.emojis | emoji_override
+        config["emojis"] = emojis
+
+        config.setdefault("coming_days", 7)
+
+        return config
+
     def __init__(self, bot: SkyBot):
         super().__init__(bot)
 
     async def cog_load(self):
-        await super().cog_load()
+        # 加载配置
+        global shard_cfg
+        shard_cfg = await self.get_config()
         # 设置更新时间
         self.set_update_time()
         self.refresh_calendar_state.start()
+        # 启动任务
+        await super().cog_load()
 
     async def cog_unload(self):
         await super().cog_unload()
@@ -104,16 +106,32 @@ class ShardCalendar(
         **kwargs,
     ):
         date = date or sky_time_now()
-        builder = ShardEmbedBuilder(self.bot)
+        builder = ShardEmbedBuilder(self.bot, shard_cfg)
         info = get_shard_info(date)
         extra = await self.get_extra_info(date)
         embeds = builder.build_embed(info, extra)
         # 实时消息不显示跳转今天按钮，且设置为持久化
-        view = ShardNavView(date, show_today=not persistent, persistent=persistent)
+        view = ShardNavView(
+            date,
+            shard_cfg,
+            show_today=not persistent,
+            persistent=persistent,
+        )
         return {
             "embeds": embeds,
             "view": view,
         }
+
+    @commands.is_owner()
+    @commands.group(name="shard", invoke_without_command=True)
+    async def prefix_shard(self, ctx: commands.Context, *, arg: str):
+        await ctx.send(f"No subcommand named `{arg}`")
+
+    @prefix_shard.command(name="config-update")
+    async def shard_config_update(self, ctx: commands.Context):
+        global shard_cfg
+        shard_cfg = await self.get_config()
+        await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @app_commands.command(description="View shards info of today.")
     @app_commands.describe(
@@ -247,9 +265,10 @@ class ShardCalendar(
 
 
 class ShardEmbedBuilder:
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyBot, config: dict[str, Any]):
         self.bot = bot
-        _reload_shard_config()
+        self.config = config
+        self.emojis: dict[str, str | discord.Emoji] = config["emojis"]
 
     def _embed_color(self, info: ShardInfo):
         if info.type == ShardType.Black:
@@ -266,17 +285,15 @@ class ShardEmbedBuilder:
         # 碎片类型信息
         field = f"{info.type.name} Shard"
         # 如果设置了emoji就添加
-        emojis = _config("emojis")
-        type_emoji = emojis.get(info.type.name)
-        if type_emoji:
-            field = type_emoji + " " + field
+        if type_emoji := self.emojis.get(info.type.name):
+            field = f"{type_emoji} {field}"
         # 奖励类型及数量
-        reward_unit = emojis.get(info.reward_type.name, info.reward_type.name)
+        reward_unit = self.emojis.get(info.reward_type.name, info.reward_type.name)
         field += f" [{info.reward_number}{reward_unit}]"
         return field
 
     def _map_field(self, info: ShardInfo):
-        trans = _config("translations")
+        trans = self.config["translations"]
         field = trans[info.map] + ", " + trans[info.realm]
         return field
 
@@ -299,16 +316,13 @@ class ShardEmbedBuilder:
         field = "\n".join(occur_msgs)
         return field
 
-    def _coming_field(self, info: ShardInfo, days):
+    def _coming_field(self, info: ShardInfo, days: int):
         # 接下来几天的碎片类型
-        emojis = _config("emojis")
-
         def _symbol(when: datetime):
             _info = get_shard_info(when)
             if _info.has_shard:
-                symbol = emojis.get(_info.type.name) or (
-                    "⚫" if _info.type == ShardType.Black else "🔴"
-                )
+                default = {ShardType.Black: "⚫", ShardType.Red: "🔴"}
+                symbol = str(self.emojis.get(_info.type.name, default[_info.type]))
             else:
                 symbol = "☀️"
             if when.weekday() == 0:
@@ -321,8 +335,7 @@ class ShardEmbedBuilder:
 
     def build_embed(self, info: ShardInfo, extra: ShardExtra | None, now=None):
         embeds: list[discord.Embed] = []
-        emojis = _config("emojis")
-        graph = _config("infographics")
+        graph = self.config["infographics"]
         if info.has_shard:
             basic_embed = (
                 discord.Embed(
@@ -330,18 +343,18 @@ class ShardEmbedBuilder:
                     description=f"-# Shard Calendar - {self._date_field(info)}\n## {self._type_field(info)}",
                 )
                 .add_field(
-                    name=emojis.get("Map", "📍") + " " + "__Map__",
+                    name=f"{self.emojis.get('Map', '📍')} __Map__",
                     value=self._map_field(info),
                     inline=True,
                 )
                 .add_field(
-                    name=emojis.get("Timeline", "⏳") + " " + "__Timeline__",
+                    name=f"{self.emojis.get('Timeline', '⏳')} __Timeline__",
                     value=self._timeline_field(info, now),
                     inline=False,
                 )
                 .add_field(
-                    name=emojis.get("Next", "⤵️") + " " + "__Coming days__",
-                    value=self._coming_field(info, _config("coming_days")),
+                    name=f"{self.emojis.get('Next', '⤵️')} __Coming days__",
+                    value=self._coming_field(info, self.config["coming_days"]),
                     inline=False,
                 )
                 .set_image(url=graph.get(".".join([info.realm, info.map])))
@@ -355,8 +368,8 @@ class ShardEmbedBuilder:
                     description=f"-# Shard Calendar - {timestamp(info.date, 'D')}\n## ☀️ No Shard Day",
                 )
                 .add_field(
-                    name=emojis.get("Next", "⤵️") + " " + "__Coming days__",
-                    value=self._coming_field(info, _config("coming_days")),
+                    name=f"{self.emojis.get('Next', '⤵️')} __Coming days__",
+                    value=self._coming_field(info, self.config["coming_days"]),
                 )
                 .set_image(url=graph.get("noshard"))
             )
@@ -371,9 +384,8 @@ class ShardEmbedBuilder:
     ):
         if info.type != ShardType.Red:
             return
-        emojis = _config("emojis")
-        graph = _config("infographics")
-        title = emojis.get("Memory", "💠") + " " + "__Memory__"
+        graph = self.config["infographics"]
+        title = f"{self.emojis.get('Memory', '💠')} __Memory__"
         # 显示Shard Memory信息
         if not (extra and extra.has_memory):
             embeds[0].insert_field_at(1, name=title, value="*Unknown yet*", inline=True)
@@ -383,7 +395,7 @@ class ShardEmbedBuilder:
             # 显示Shard Memory图片
             memory_embed = discord.Embed(
                 color=self._embed_color(info),
-                title=f"{emojis.get('Crystal', '💠')} Shard Memory [{memory.name}]",
+                title=f"{self.emojis.get('Crystal', '💠')} Shard Memory [{memory.name}]",
             ).set_image(
                 url=graph.get(f"memory.{memory.value}"),
             )
@@ -402,14 +414,14 @@ class ShardNavView(AutoDisableView):
     def __init__(
         self,
         date: datetime,
+        config: dict[str, Any],
         *,
         show_today: bool = True,
         persistent: bool = False,
     ):
         # persistent 除了影响UI是否持久化，还会影响按钮交互的回复方式
         super().__init__(timeout=None if persistent else 600)
-        _reload_shard_config()
-        emojis = _config("emojis")
+        emojis: dict[str, str | discord.Emoji] = config["emojis"]
         now = sky_time_now()
 
         def add_button(dt, label):
@@ -417,7 +429,8 @@ class ShardNavView(AutoDisableView):
             # 如果是今天的按钮，且当前显示日期也为今天，则禁用
             is_today = dt == "today" and now.date() == date.date()
             if info.has_shard:
-                emoji = emojis.get(info.type.name)
+                default = {ShardType.Black: "⚫", ShardType.Red: "🔴"}
+                emoji = str(emojis.get(info.type.name, default[info.type]))
             else:
                 emoji = "☀️"
             self.add_item(
@@ -479,11 +492,11 @@ class ShardNavButton(
             date = self.date
         else:
             date = sky_time_now()
-        builder = ShardEmbedBuilder(interaction.client)  # type: ignore
+        builder = ShardEmbedBuilder(interaction.client, shard_cfg)  # type: ignore
         info = get_shard_info(date)
         extra = await ShardCalendar.get_extra_info(date)
         embeds = builder.build_embed(info, extra)
-        view = ShardNavView(date)
+        view = ShardNavView(date, shard_cfg)
         # 如果是持久化的按钮，则新发送一条消息，否则编辑原消息
         # 目前持久化的按钮在实时更新的消息中使用，其消息由task负责更新，因此不应该在这里编辑
         if self.persistent:
