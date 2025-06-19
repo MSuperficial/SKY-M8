@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
+from cogs.emoji_manager import Emojis
 from utils.remote_config import remote_config
 
 from .shard import get_shard_info
@@ -68,7 +69,7 @@ _daily_event_data = {
     ),
     "aurora": DailyEventData(
         id="aurora",
-        name="🎶 Aurora Concert",
+        name=f"{Emojis('season_aurora', '🎶')} Aurora Concert",
         offset=10,
         duration=48,
         period=240,

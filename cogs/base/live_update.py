@@ -133,18 +133,18 @@ class LiveUpdateCog(commands.Cog):
         me = interaction.guild.me  # type: ignore
         if not channel.permissions_for(me).manage_webhooks:
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "Missing permission",
-                    description=f"Please add `Manage Webhooks` permission for {me.mention} first.",
+                    f"Please add `Manage Webhooks` permission for {me.mention} first.",
                 ),
             )
             return
         # 如果当前服务器已配置live消息则返回
         if lw := get(self.live_webhooks, message__guild=interaction.guild):
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "Already setup",
-                    description=f"{self._DISPLAY_NAME} live message already setup: {lw.message.jump_url}.",
+                    f"{self._DISPLAY_NAME} live message already setup: {lw.message.jump_url}.",
                 ),
             )
             return
@@ -172,9 +172,9 @@ class LiveUpdateCog(commands.Cog):
                 await remote_config.append_list(self._WEBHOOKS_KEY, live_webhook.to_dict())  # fmt: skip
                 self.live_webhooks.append(live_webhook)
             await followup.edit(
-                embed=await success(
+                embed=success(
                     "Success",
-                    description=f"{self._DISPLAY_NAME} live message {message.jump_url} setup in {channel.mention}.",
+                    f"{self._DISPLAY_NAME} live message {message.jump_url} setup in {channel.mention}.",
                 )
             )
             print(
@@ -182,16 +182,16 @@ class LiveUpdateCog(commands.Cog):
                 f"{message.jump_url}."
             )
         except Exception as ex:
-            await followup.edit(embed=await fail("Error", description=str(ex)))
+            await followup.edit(embed=fail("Error", ex))
 
     async def _live_remove_impl(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         # 如果当前服务器还未配置live消息则返回
         if not (lw := get(self.live_webhooks, message__guild=interaction.guild)):
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "Not setup",
-                    description=f"{self._DISPLAY_NAME} live message hasn't been setup in this server.",
+                    f"{self._DISPLAY_NAME} live message hasn't been setup in this server.",
                 ),
             )
             return
@@ -222,10 +222,10 @@ class LiveUpdateCog(commands.Cog):
                         f"{lw.message.jump_url}."
                     )
             await followup.edit(
-                embed=await success(f"{self._DISPLAY_NAME} live message removed")
+                embed=success(f"{self._DISPLAY_NAME} live message removed")
             )
         except Exception as ex:
-            await followup.edit(embed=await fail("Error", description=str(ex)))
+            await followup.edit(embed=fail("Error", ex))
 
     async def get_live_message_data(self, **kwargs) -> dict[str, Any]:
         """Get the live message data.

@@ -144,31 +144,24 @@ class Welcome(commands.Cog):
         guild: discord.Guild = interaction.guild  # type: ignore
         if not await remote_config.exists_json(self._WELCOME_KEY, guild.id, "message"):
             # 需要先设置消息才能单独更改图片
-            await interaction.followup.send(
-                embed=await fail("Please set message first"),
-            )
+            await interaction.followup.send(embed=fail("Please set message first"))
             return
         if not file and not url:
             # 至少要指定一个参数
-            await interaction.followup.send(
-                embed=await fail("Both options are empty"),
-            )
+            await interaction.followup.send(embed=fail("Both options are empty"))
             return
         if file:
             # 需要设置database频道以支持文件上传
             if not self._db_channel:
                 await interaction.followup.send(
-                    embed=await fail("File uploading not available"),
+                    embed=fail("File uploading not available")
                 )
                 return
             # 检查图片文件格式
             if not self._is_img_file_valid(file):
+                valid_types = ", ".join([f"`{t}`" for t in self._img_types])
                 await interaction.followup.send(
-                    embed=await fail(
-                        "Format not supported",
-                        description="Only support "
-                        + ", ".join([f"`{t}`" for t in self._img_types]),
-                    ),
+                    embed=fail("Format not supported", "Only support " + valid_types),
                 )
                 return
             # 发送文件至database频道并获取url
@@ -192,13 +185,9 @@ class Welcome(commands.Cog):
         except discord.HTTPException as ex:
             if ex.status == 400:
                 # url格式错误
-                await interaction.followup.send(
-                    embed=await fail("Invalid url format"),
-                )
+                await interaction.followup.send(embed=fail("Invalid url format"))
             else:
-                await interaction.followup.send(
-                    embed=await fail("Error while saving", description=str(ex)),
-                )
+                await interaction.followup.send(embed=fail("Error while saving", ex))
 
     @group_welcome.command(name="roles", description="Set default roles for new members.")  # fmt: skip
     async def welcome_roles(self, interaction: Interaction):
@@ -207,9 +196,9 @@ class Welcome(commands.Cog):
         # 检查权限
         if not guild.me.guild_permissions.manage_roles:
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "Missing permission",
-                    description=f"Please add `Manage Roles` permission for {guild.me.mention} first.",
+                    f"Please add `Manage Roles` permission for {guild.me.mention} first.",
                 ),
             )
             return
@@ -367,7 +356,7 @@ class WelcomeMessageView(AutoDisableView):
                 discord.Color.from_str(color)
             except ValueError:
                 await interaction.followup.send(
-                    embed=await fail("Invalid color format"),
+                    embed=fail("Invalid color format"),
                     ephemeral=True,
                 )
                 return
@@ -393,7 +382,7 @@ class WelcomeMessageView(AutoDisableView):
                 # url格式错误
                 self.msg_obj["image"] = old_image
                 await interaction.followup.send(
-                    embed=await fail("Invalid url format"),
+                    embed=fail("Invalid url format"),
                     ephemeral=True,
                 )
             else:
@@ -422,12 +411,10 @@ class WelcomeMessageView(AutoDisableView):
                 Welcome._WELCOME_KEY, guild.id, "message", value=self.msg_obj
             )
             await interaction.followup.send(
-                embed=await success("Welcome message saved"),
+                embed=success("Welcome message saved"),
             )
         except Exception as ex:
-            await interaction.followup.send(
-                embed=await fail("Error while saving", description=str(ex)),
-            )
+            await interaction.followup.send(embed=fail("Error while saving", ex))
 
 
 class WelcomeRolesView(AutoDisableView):
@@ -448,9 +435,9 @@ class WelcomeRolesView(AutoDisableView):
         if roles:
             mentions = " ".join([r.mention for r in roles])
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "Invalid roles",
-                    description="These roles aren't assignable:\n" + mentions,
+                    "These roles aren't assignable:\n" + mentions,
                 ),
                 ephemeral=True,
             )
@@ -474,13 +461,9 @@ class WelcomeRolesView(AutoDisableView):
             if invalid:
                 msg += "\nRemoved unassignable roles:\n"
                 msg += " ".join([r.mention for r in invalid])
-            await interaction.followup.send(
-                embed=await success("Default roles saved", description=msg),
-            )
+            await interaction.followup.send(embed=success("Default roles saved", msg))
         except Exception as ex:
-            await interaction.followup.send(
-                embed=await fail("Error while saving", description=str(ex)),
-            )
+            await interaction.followup.send(embed=fail("Error while saving", ex))
 
 
 async def setup(bot: SkyBot):

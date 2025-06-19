@@ -142,7 +142,7 @@ class ShardCalendar(
         # 日期格式错误
         if not date:
             await interaction.followup.send(
-                embed=await fail("Date format error"),
+                embed=fail("Date format error"),
                 ephemeral=private,
             )
             return
@@ -190,7 +190,7 @@ class ShardCalendar(
         # 日期格式错误
         if not dt:
             await interaction.followup.send(
-                embed=await fail("Date format error"),
+                embed=fail("Date format error"),
                 ephemeral=True,
             )
             return
@@ -198,14 +198,14 @@ class ShardCalendar(
         if not info.has_shard:
             # 当日没有碎石事件
             await interaction.followup.send(
-                embed=await fail("It's a no shard day"),
+                embed=fail("It's a no shard day"),
                 ephemeral=True,
             )
             return
         elif info.type == ShardType.Black:
             # 黑石事件没有回忆场景
             await interaction.followup.send(
-                embed=await fail("Black shard doesn't have shard memory"),
+                embed=fail("Black shard doesn't have shard memory"),
                 ephemeral=True,
             )
             return
@@ -220,13 +220,13 @@ class ShardCalendar(
             await self.set_extra_info(dt, extra)
             # 成功记录
             await interaction.followup.send(
-                embed=await success("Successfully recorded"),
+                embed=success("Successfully recorded"),
                 ephemeral=True,
             )
-        except Exception as e:
+        except Exception as ex:
             # 其他错误
             await interaction.followup.send(
-                embed=await fail("Error while recording", description=str(e)),
+                embed=fail("Error while recording", ex),
                 ephemeral=True,
             )
             return

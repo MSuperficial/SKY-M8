@@ -99,7 +99,7 @@ class DateModal(ui.Modal, title="Set Date"):
             self.valid = True
         except ValueError:
             await interaction.followup.send(
-                embed=await fail("Invalid date"),
+                embed=fail("Invalid date"),
                 ephemeral=True,
             )
 
@@ -146,7 +146,7 @@ class TimeModal(ui.Modal, title="Set Time"):
             self.valid = True
         except ValueError:
             await interaction.followup.send(
-                embed=await fail("Invalid time"),
+                embed=fail("Invalid time"),
                 ephemeral=True,
             )
 
@@ -170,9 +170,8 @@ class TimeZoneModal(ui.Modal, title="Set Time Zone"):
             # 时区无效则提示用户可能的匹配
             matches = TimezoneFinder.best_matches(tz, limit=5)
             hint = format_hint(matches)
-            embed = await fail("Invalid time zone")
             await interaction.followup.send(
                 content=hint,
-                embed=embed,
+                embed=fail("Invalid time zone"),
                 ephemeral=True,
             )

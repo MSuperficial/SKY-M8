@@ -83,15 +83,13 @@ class UserProfile(commands.Cog):
         try:
             await remote_config.set_json(self._PROFILE_KEY, user.id, "private", value=private)  # fmt: skip
             await interaction.followup.send(
-                embed=await success(
+                embed=success(
                     "Success",
-                    description=f"Your profile is now __{'private' if private else 'public'}__.",
+                    f"Your profile is now __{'private' if private else 'public'}__.",
                 )
             )
         except Exception as ex:
-            await interaction.followup.send(
-                embed=await fail("Error while setting", description=str(ex))
-            )
+            await interaction.followup.send(embed=fail("Error while setting", ex))
 
     @group_profile.command(name="unset", description="Remove a field in your profile.")
     @app_commands.describe(
@@ -106,11 +104,9 @@ class UserProfile(commands.Cog):
         user = interaction.user
         try:
             await remote_config.delete_json(self._PROFILE_KEY, user.id, field)
-            await interaction.followup.send(embed=await success("Success"))
+            await interaction.followup.send(embed=success("Success"))
         except Exception as ex:
-            await interaction.followup.send(
-                embed=await fail("Error while removing", description=str(ex))
-            )
+            await interaction.followup.send(embed=fail("Error while removing", ex))
 
     @group_profile.command(name="timezone", description="Set your time zone.")
     @app_commands.describe(
@@ -125,9 +121,9 @@ class UserProfile(commands.Cog):
             # 时区无效则提示用户可能的匹配并返回
             matches = TimezoneFinder.best_matches(timezone, limit=5)
             hint = format_hint(matches)
-            embed = await fail(
+            embed = fail(
                 "Invalid time zone",
-                description=(
+                (
                     f"Cannot find a time zone matching `{timezone}`.\n"
                     "If you're not sure about your time zone, click the button below to check!"
                 ),
@@ -154,6 +150,4 @@ class UserProfile(commands.Cog):
             embed = display.embed(user, ZoneInfo(timezone))
             await interaction.followup.send(embed=embed)
         except Exception as ex:
-            await interaction.followup.send(
-                embed=await fail("Error while saving", description=str(ex))
-            )
+            await interaction.followup.send(embed=fail("Error while saving", ex))

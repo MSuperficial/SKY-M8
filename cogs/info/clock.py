@@ -46,9 +46,7 @@ class Clock(commands.Cog):
                 # 如果是用户自己的时区没设置，提醒通过指定的命令添加
                 cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)
                 desc += f"\nUse {cmd} to save your default time zone."
-            await interaction.followup.send(
-                embed=await fail("No time zone", description=desc)
-            )
+            await interaction.followup.send(embed=fail("No time zone", desc))
             return
         tzinfo = ZoneInfo(tz)
         user_tz: str | None = await UserProfile.fields(user.id, "timezone")  # type: ignore
@@ -92,7 +90,7 @@ class Clock(commands.Cog):
         users = list(dict.fromkeys(users))
         if len(users) < 2:
             await interaction.followup.send(
-                embed=await fail("At least two users (not bots) needed"),
+                embed=fail("At least two users (not bots) needed"),
             )
             return
         # 第一个用户的时区作为基准，必须不为空
@@ -100,9 +98,9 @@ class Clock(commands.Cog):
         pri, tz = await UserProfile.fields(base.id, "private", "timezone")  # type: ignore
         if (base != interaction.user and pri) or not tz:
             await interaction.followup.send(
-                embed=await fail(
+                embed=fail(
                     "No time zone",
-                    description=f"User {users[0].mention} does not provide time zone",
+                    f"User {users[0].mention} does not provide time zone",
                 ),
             )
             return
@@ -157,7 +155,7 @@ class ClockCompareView(AutoDisableView):
         users = [u for u in select.values if u != self.base and not u.bot]
         if len(users) < 1:
             await interaction.followup.send(
-                embed=await fail("At least one extra users (not bots) needed"),
+                embed=fail("At least one extra users (not bots) needed"),
                 ephemeral=True,
             )
             return

@@ -24,6 +24,7 @@ async def main():
     intents.message_content = True
 
     initial_extensions = [
+        "emoji_manager",
         "info",
         "tools",
         "welcome",

@@ -49,13 +49,12 @@ class TimestampMaker(commands.Cog):
                 # 时区无效则提示用户可能的匹配并返回
                 matches = TimezoneFinder.best_matches(timezone, limit=5)
                 hint = format_hint(matches)
-                embed = await fail(
-                    "Invalid time zone",
-                    description=f"Cannot find a time zone matching `{timezone}`.",
-                )
                 await interaction.followup.send(
                     content=hint,
-                    embed=embed,
+                    embed=fail(
+                        "Invalid time zone",
+                        f"Cannot find a time zone matching `{timezone}`.",
+                    ),
                 )
                 return
         elif others:
@@ -65,9 +64,9 @@ class TimestampMaker(commands.Cog):
                 tzinfo = ZoneInfo(tz)
             else:
                 await interaction.followup.send(
-                    embed=await fail(
+                    embed=fail(
                         "No time zone",
-                        description=f"User {others.mention} does not provide time zone.",
+                        f"User {others.mention} does not provide time zone.",
                     )
                 )
                 return
@@ -79,9 +78,9 @@ class TimestampMaker(commands.Cog):
             else:
                 cmd = await self.bot.tree.find_mention_for(UserProfile.profile_timezone)
                 await interaction.followup.send(
-                    embed=await fail(
+                    embed=fail(
                         "No time zone",
-                        description=(
+                        (
                             "You haven't set your time zone!\n"
                             f"Use {cmd} to save your default time zone, or specify an option."
                         ),

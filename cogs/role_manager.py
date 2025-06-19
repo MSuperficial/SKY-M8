@@ -57,7 +57,7 @@ class RoleManager(commands.Cog):
     ):
         if not message or len(message.embeds) == 0:
             await interaction.response.send_message(
-                embed=await fail("Invalid message"),
+                embed=fail("Invalid message"),
                 ephemeral=True,
             )
         await interaction.response.defer(ephemeral=True)
@@ -240,7 +240,7 @@ class AutoRolesView(ui.View):
             role = interaction.guild.get_role(self.role_id)  # type: ignore
             if not role:
                 await interaction.followup.send(
-                    embed=await fail(f"Role {self.role_id} does not exist"),
+                    embed=fail(f"Role {self.role_id} does not exist"),
                 )
                 return
             member: discord.Member = interaction.user  # type: ignore
@@ -249,17 +249,15 @@ class AutoRolesView(ui.View):
                 if member.get_role(role.id):
                     await member.remove_roles(role, reason="Autoroles")
                     await interaction.followup.send(
-                        embed=await success("Removed role", description=role.mention),
+                        embed=success("Removed role", role.mention),
                     )
                 else:
                     await member.add_roles(role, reason="Autoroles")
                     await interaction.followup.send(
-                        embed=await success("Added role", description=role.mention),
+                        embed=success("Added role", role.mention),
                     )
             except discord.HTTPException as ex:
-                await interaction.followup.send(
-                    embed=await fail("Error in Autoroles", description=str(ex)),
-                )
+                await interaction.followup.send(embed=fail("Error in Autoroles", ex))
 
     def __init__(self, roles: list[discord.Role]):
         super().__init__(timeout=None)

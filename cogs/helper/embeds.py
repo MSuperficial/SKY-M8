@@ -1,6 +1,8 @@
+from typing import Any
+
 from discord import Color, Embed
 
-from utils.remote_config import remote_config
+from cogs.emoji_manager import Emojis
 
 __all__ = (
     "success",
@@ -8,19 +10,17 @@ __all__ = (
 )
 
 
-async def success(title: str, *, color=Color.green(), description=None):
-    _emoji_success = await remote_config.get_field("emojis", "success") or "✅"
+def success(title: str, description: Any | None = None, *, color=Color.green()):
     return Embed(
         color=color,
-        title=_emoji_success + " " + title,
+        title=f"{Emojis('success', '✅')} {title}",
         description=description,
     )
 
 
-async def fail(title: str, *, color=Color.red(), description=None):
-    _emoji_fail = await remote_config.get_field("emojis", "fail") or "❌"
+def fail(title: str, description: Any | None = None, *, color=Color.red()):
     return Embed(
         color=color,
-        title=_emoji_fail + " " + title,
+        title=f"{Emojis('fail', '❌')} {title}",
         description=description,
     )

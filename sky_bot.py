@@ -1,4 +1,5 @@
 from logging import getLogger
+from types import MappingProxyType
 from typing import Generator, List, Optional
 
 import discord
@@ -29,8 +30,10 @@ class SkyBot(commands.Bot):
         )
         self.initial_extensions = initial_extensions
         self._owner: discord.User = MISSING
+        self.app_emojis: MappingProxyType[str, discord.Emoji] = MappingProxyType({})
 
     async def setup_hook(self) -> None:
+        await self.fetch_application_emojis()
         # 加载初始扩展
         await self.add_cog(CogManager(self))
         for extension in self.initial_extensions:
@@ -59,6 +62,11 @@ class SkyBot(commands.Bot):
             return
         # 处理命令
         await super().on_message(message)
+
+    async def fetch_application_emojis(self):
+        emojis = await super().fetch_application_emojis()
+        self.app_emojis = MappingProxyType({e.name: e for e in emojis})
+        return emojis
 
 
 # fmt: off
