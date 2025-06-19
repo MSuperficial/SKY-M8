@@ -410,9 +410,16 @@ class WelcomeMessageView(AutoDisableView):
             await remote_config.merge_json(
                 Welcome._WELCOME_KEY, guild.id, "message", value=self.msg_obj
             )
-            await interaction.followup.send(
-                embed=success("Welcome message saved"),
-            )
+            embed = success("Welcome message saved")
+            if not guild.system_channel:
+                # 提示设置系统消息频道
+                embed.color = discord.Color.orange()
+                embed.description = (
+                    "### Warning\n"
+                    "You need to select a system channel to make this work.\n"
+                    "> Settings > Engagement (or Overview on mobile) > System Message Channel"
+                )
+            await interaction.followup.send(embed=embed)
         except Exception as ex:
             await interaction.followup.send(embed=fail("Error while saving", ex))
 
