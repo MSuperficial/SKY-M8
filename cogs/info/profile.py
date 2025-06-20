@@ -1,4 +1,4 @@
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, overload
 from zoneinfo import ZoneInfo
 
 from discord import ButtonStyle, Interaction, app_commands, ui
@@ -24,7 +24,7 @@ __all__ = (
 
 
 class UserProfileData(NamedTuple):
-    private: bool
+    hidden: bool
     timezone: ZoneInfo | None
 
 
@@ -50,42 +50,86 @@ class UserProfile(commands.Cog):
     )
 
     @classmethod
-    async def user(cls, user_id: int):
-        obj: dict[str, Any] | None = await remote_config.get_json(
-            cls._PROFILE_KEY, user_id
-        )
-        if not obj:
-            return None
+    async def set(cls, user_id: int, guild_id: int, field: str, value):
+        await remote_config.set_json(cls._PROFILE_KEY, user_id, guild_id, field, value=value)  # fmt: skip
+
+    @classmethod
+    async def unset(cls, user_id: int, guild_id: int, field: str):
+        await remote_config.delete_json(cls._PROFILE_KEY, user_id, guild_id, field)
+
+    @classmethod
+    async def user(cls, user_id: int, guild_id=0, merge=True):
+        data = await remote_config.get_json(cls._PROFILE_KEY, user_id, guild_id) or {}
+        if merge and guild_id != 0:
+            main = await remote_config.get_json(cls._PROFILE_KEY, user_id, 0) or {}
+            data = main | data
+        hidden = data.get("hidden", False)
         timezone = None
-        if obj["timezone"] in tzutils.valid_timezones:
-            timezone = ZoneInfo(obj["timezone"])
+        if data.get("timezone") in tzutils.valid_timezones:
+            timezone = ZoneInfo(data["timezone"])
         return UserProfileData(
-            private=obj["private"],
+            hidden=hidden,
             timezone=timezone,
         )
 
+    # fmt: off
+    @overload
     @classmethod
-    async def fields(cls, user_id: int, *fields: str):
-        paths = [[user_id, f] for f in fields]
+    async def fields(cls, user_id: int, *, guild_id=0, merge=True) -> None: ...
+    @overload
+    @classmethod
+    async def fields(cls, user_id: int, __field: str, /, *, guild_id=0, merge=True) -> Any | None: ...
+    @overload
+    @classmethod
+    async def fields(cls, user_id: int, __field: str, /, *fields: str, guild_id=0, merge=True) -> list[Any | None]: ...
+    # fmt: on
+
+    @classmethod
+    async def fields(cls, user_id: int, *fields: str, guild_id=0, merge=True):
+        if len(fields) == 0:
+            return None
+        paths = [[user_id, guild_id, f] for f in fields]
         values = await remote_config.get_json_m(cls._PROFILE_KEY, *paths)
-        return values
+        if merge and guild_id != 0:
+            main_paths = [[user_id, 0, f] for f in fields]
+            main_values = await remote_config.get_json_m(cls._PROFILE_KEY, *main_paths)
+            values = [m if s is None else s for s, m in zip(values, main_values)]
+        return values if len(values) > 1 else values[0]
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
 
+    async def __check_guild(self, interaction: Interaction, per_server: bool):
+        guild_id = interaction.guild_id if per_server else 0
+        if guild_id is None:
+            await interaction.followup.send(embed=fail("You are not in a server"))
+            return None
+        return guild_id
+
     @group_profile.command(name="visibility", description="Set your profile's visibility to others.")  # fmt: skip
     @app_commands.describe(
-        private="Whether to hide your profile to others, by default False",
+        hidden="Whether to hide your profile to others, defaults to public",
+        per_server="Set per-server profile instead of main, defaults to main profile",
     )
-    async def profile_visibility(self, interaction: Interaction, private: bool):
+    @app_commands.rename(per_server="per-server")
+    async def profile_visibility(
+        self,
+        interaction: Interaction,
+        hidden: bool,
+        per_server: bool = False,
+    ):
         await interaction.response.defer(ephemeral=True)
+        if (guild_id := await self.__check_guild(interaction, per_server)) is None:
+            return
         user = interaction.user
         try:
-            await remote_config.set_json(self._PROFILE_KEY, user.id, "private", value=private)  # fmt: skip
+            await self.set(user.id, guild_id, "hidden", hidden)
+            scope = "per-server" if per_server else "main"
+            visibility = "hidden" if hidden else "public"
             await interaction.followup.send(
                 embed=success(
                     "Success",
-                    f"Your profile is now __{'private' if private else 'public'}__.",
+                    f"Your **{scope}** profile is now __{visibility}__.",
                 )
             )
         except Exception as ex:
@@ -94,27 +138,41 @@ class UserProfile(commands.Cog):
     @group_profile.command(name="unset", description="Remove a field in your profile.")
     @app_commands.describe(
         field="The field you want to remove.",
+        per_server="Remove per-server profile instead of main, defaults to main profile",
     )
+    @app_commands.rename(per_server="per-server")
     async def profile_unset(
         self,
         interaction: Interaction,
         field: app_commands.Transform[str, FieldTransformer],
+        per_server: bool = False,
     ):
         await interaction.response.defer(ephemeral=True)
+        if (guild_id := await self.__check_guild(interaction, per_server)) is None:
+            return
         user = interaction.user
         try:
-            await remote_config.delete_json(self._PROFILE_KEY, user.id, field)
+            await self.unset(user.id, guild_id, field)
             await interaction.followup.send(embed=success("Success"))
         except Exception as ex:
             await interaction.followup.send(embed=fail("Error while removing", ex))
 
     @group_profile.command(name="timezone", description="Set your time zone.")
     @app_commands.describe(
-        timezone="Time zone id or country where only one time zone is used.",
+        timezone="Type time zone name or country name to search.",
+        per_server="Set per-server profile instead of main, defaults to main profile",
     )
+    @app_commands.rename(per_server="per-server")
     @app_commands.autocomplete(timezone=tz_autocomplete)
-    async def profile_timezone(self, interaction: Interaction, timezone: str):
+    async def profile_timezone(
+        self,
+        interaction: Interaction,
+        timezone: str,
+        per_server: bool = False,
+    ):
         await interaction.response.defer(ephemeral=True)
+        if (guild_id := await self.__check_guild(interaction, per_server)) is None:
+            return
         # 尝试精确匹配时区
         match = TimezoneFinder.exact_match(timezone)
         if not match:
@@ -144,7 +202,7 @@ class UserProfile(commands.Cog):
         user = interaction.user
         timezone = match[0]
         try:
-            await remote_config.set_json(self._PROFILE_KEY, user.id, "timezone", value=timezone)  # fmt: skip
+            await self.set(user.id, guild_id, "timezone", timezone)
             # 展示当前时区信息
             display = TimezoneDisplay()
             embed = display.embed(user, ZoneInfo(timezone))

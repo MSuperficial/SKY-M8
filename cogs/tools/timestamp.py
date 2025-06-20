@@ -39,6 +39,7 @@ class TimestampMaker(commands.Cog):
         others: discord.User | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild_id if interaction.guild_id else 0
         # 使用时区的优先级 timezone > others > UserProfile
         tzinfo = None
         if timezone:
@@ -59,8 +60,12 @@ class TimestampMaker(commands.Cog):
                 return
         elif others:
             # 获取指定用户的时区
-            private, tz = await UserProfile.fields(others.id, "private", "timezone")  # type: ignore
-            if not private and tz:
+            hidden, tz = await UserProfile.fields(
+                others.id,
+                *["hidden", "timezone"],
+                guild_id=guild_id,
+            )
+            if not hidden and tz:
                 tzinfo = ZoneInfo(tz)
             else:
                 await interaction.followup.send(
@@ -72,7 +77,11 @@ class TimestampMaker(commands.Cog):
                 return
         else:
             # 获取当前用户的时区
-            tz: str = await UserProfile.fields(interaction.user.id, "timezone")  # type: ignore
+            tz = await UserProfile.fields(
+                interaction.user.id,
+                "timezone",
+                guild_id=guild_id,
+            )
             if tz:
                 tzinfo = ZoneInfo(tz)
             else:

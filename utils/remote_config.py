@@ -67,17 +67,18 @@ class RemoteConfig:
         else:
             return value[0]
 
-    async def get_json_m(self, key, *paths):
+    async def get_json_m(self, key, *paths) -> list[Any | None]:
+        if len(paths) == 0:
+            return []
         if len(paths) == 1:
-            return await self.get_json(key, *paths[0])
+            # 返回结果为列表
+            return [await self.get_json(key, *paths[0])]
         paths = [self._join_path(*p) for p in paths]
         value_dict: dict[str, list[Any]] = await self.redis.json.get(key, *paths)  # type: ignore
+        # 在paths上迭代保证返回值和输入保持一致
         values = [value_dict[p] for p in paths]
         values = [v[0] if v else None for v in values]
-        if len(values) == 1:
-            return values[0]
-        else:
-            return values
+        return values
 
     async def _ensure_path_exist(self, key, *path):
         if not await self.redis.json.type(key):
