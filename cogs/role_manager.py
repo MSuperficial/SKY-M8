@@ -68,7 +68,7 @@ class RoleManager(commands.Cog):
 
 
 class AutoRolesSetupView(AutoDisableView):
-    def __init__(self, *, timeout=600):
+    def __init__(self, *, timeout=840):
         super().__init__(timeout=timeout)
         self.title: str = ""
         self.description: str = ""

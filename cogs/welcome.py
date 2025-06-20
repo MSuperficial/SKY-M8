@@ -271,7 +271,8 @@ class WelcomeMessageBuilder:
 
 class WelcomeMessageView(AutoDisableView):
     def __init__(self, *, msg_obj: dict[str, Any], builder: WelcomeMessageBuilder):
-        super().__init__(timeout=900)
+        # 设置为840秒，因为900秒后消息会到期超时
+        super().__init__(timeout=840)
         self.add_item(
             ui.Button(
                 style=ButtonStyle.url,

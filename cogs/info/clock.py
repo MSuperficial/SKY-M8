@@ -126,7 +126,7 @@ class ClockCompareView(AutoDisableView):
         base_tz: ZoneInfo,
         extras: list[discord.User],
     ):
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
         self.base = base
         self.base_tz = base_tz
         self.extras = extras

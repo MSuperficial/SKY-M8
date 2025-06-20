@@ -1,6 +1,7 @@
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
+import discord
 from discord import Interaction, Message, TextStyle, ui
 
 from ..helper.embeds import fail
@@ -19,7 +20,14 @@ class AutoDisableView(ui.View):
                 if isinstance(item, ui.DynamicItem):
                     item = item.item
                 item.disabled = True  # type: ignore
-            await self.response_msg.edit(view=self)
+            try:
+                await self.response_msg.edit(view=self)
+            except discord.HTTPException as ex:
+                # 忽略webhook到期超时，和消息不存在（已被删除）异常
+                if ex.code in [401, 404]:
+                    pass
+                else:
+                    raise
 
 
 class EmptyModal(ui.Modal):
