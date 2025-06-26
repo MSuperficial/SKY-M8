@@ -22,6 +22,7 @@ __all__ = ("LiveUpdateCog",)
 class LiveUpdateCog(commands.Cog):
     _WEBHOOKS_KEY = "liveUpdate.webhooks"
     _DISPLAY_NAME = "Live Update"
+    _global_update_lock = asyncio.Lock()
 
     def __init_subclass__(
         cls,
@@ -272,13 +273,16 @@ class LiveUpdateCog(commands.Cog):
             return
         # 依次更新所有消息
         errors = []
-        async with self._live_lock:
-            for lw in self.live_webhooks:
-                try:
-                    await lw.message.edit(**data)
-                except discord.HTTPException as ex:
-                    errors.append(f"- Message {lw.message.jump_url}: {str(ex)}")
-                await asyncio.sleep(1)  # 降低编辑频率
+        # _global_update_lock 主要作用是在程序启动时全局限制编辑频率（所有子类范围内）
+        # 而 _live_lock 主要是保护对 live_webhooks 属性的同步访问（某个子类范围内）
+        async with self._global_update_lock:
+            async with self._live_lock:
+                for lw in self.live_webhooks:
+                    try:
+                        await lw.message.edit(**data)
+                    except discord.HTTPException as ex:
+                        errors.append(f"- Message {lw.message.jump_url}: {str(ex)}")
+                    await asyncio.sleep(1)  # 降低编辑频率
         total = len(self.live_webhooks)
         success = total - len(errors)
         print(f"[{sky_time_now()}] Updated {self._DISPLAY_NAME} live message in {success}/{total} servers.")  # fmt: skip
