@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Literal, TypedDict
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
@@ -29,7 +29,19 @@ from .data.shard import (
 __all__ = ("ShardCalendar",)
 
 
-shard_cfg: dict[str, Any] = {}
+class _ShardCfg(TypedDict):
+    coming_days: int
+    emojis: dict[str, str | discord.Emoji]
+    infographics: dict[str, str]
+    translations: dict[str, str]
+
+
+shard_cfg = _ShardCfg(
+    coming_days=7,
+    emojis={},
+    infographics={},
+    translations={},
+)
 
 
 class ShardCalendar(
@@ -60,12 +72,12 @@ class ShardCalendar(
 
     @classmethod
     async def get_config(cls):
-        config: dict[str, Any] = await remote_config.get_json(cls._CONFIG_KEY)  # type: ignore
+        config: _ShardCfg = await remote_config.get_json(cls._CONFIG_KEY)  # type: ignore
 
         trans = _default_translation | config.get("translations", {})
         config["translations"] = trans
 
-        emoji_mapping: dict[str, str] = config["emojis"]
+        emoji_mapping: dict[str, str] = config["emojis"]  # type: ignore
         emoji_override = {k: Emojis(v, v) for k, v in emoji_mapping.items()}
         emojis = Emojis.emojis | emoji_override
         config["emojis"] = emojis
@@ -265,10 +277,10 @@ class ShardCalendar(
 
 
 class ShardEmbedBuilder:
-    def __init__(self, bot: SkyBot, config: dict[str, Any]):
+    def __init__(self, bot: SkyBot, config: _ShardCfg):
         self.bot = bot
         self.config = config
-        self.emojis: dict[str, str | discord.Emoji] = config["emojis"]
+        self.emojis = config["emojis"]
 
     def _embed_color(self, info: ShardInfo):
         if info.type == ShardType.Black:
@@ -414,14 +426,14 @@ class ShardNavView(AutoDisableView):
     def __init__(
         self,
         date: datetime,
-        config: dict[str, Any],
+        config: _ShardCfg,
         *,
         show_today: bool = True,
         persistent: bool = False,
     ):
         # persistent 除了影响UI是否持久化，还会影响按钮交互的回复方式
         super().__init__(timeout=None if persistent else 600)
-        emojis: dict[str, str | discord.Emoji] = config["emojis"]
+        emojis = config["emojis"]
         now = sky_time_now()
 
         def add_button(dt, label):

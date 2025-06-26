@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Callable, Union
+from typing import Callable, TypedDict, Union
 
 import discord
 from discord import Guild, Interaction, Member, User
@@ -141,7 +141,7 @@ class VarParser:
 
     @classmethod
     async def get_help(cls):
-        data = await remote_config.get_json("variableParser")
+        data: _ParserCfg = await remote_config.get_json("variableParser")  # type: ignore
         if not data:
             return ""
         vars = data["variables"]
@@ -177,3 +177,8 @@ class VarParser:
 
         pattern = r"\{(?P<key>@|&|#|[_\w\.]+)(?P<value>.*?)(?::(?P<style>\w))?\}"
         return re.sub(pattern, _parse, text)
+
+
+class _ParserCfg(TypedDict):
+    help: dict[str, str]
+    variables: list[dict[str, str]]

@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
@@ -16,17 +16,27 @@ from .helper.var_parser import VarParser
 __all__ = ("Welcome",)
 
 
+class _MsgCfg(TypedDict):
+    ping: bool
+    showAvatar: bool
+    color: str
+    title: str
+    content: str
+    footer: str
+    image: str
+
+
 class Welcome(commands.Cog):
     _WELCOME_KEY = "welcomeSetup"
-    _DEFAULT_MSG: dict[str, Any] = {
-        "ping": False,
-        "showAvatar": True,
-        "color": "#5865F2",
-        "title": "Welcome to {server.name}",
-        "content": "We are glad to have you here, {member.mention}.",
-        "footer": "You are the {member.ordinal} member of this server",
-        "image": "{randomImage}",
-    }
+    _DEFAULT_MSG = _MsgCfg(
+        ping=False,
+        showAvatar=True,
+        color="#5865F2",
+        title="Welcome to {server.name}",
+        content="We are glad to have you here, {member.mention}.",
+        footer="You are the {member.ordinal} member of this server",
+        image="{randomImage}",
+    )
     group_welcome = app_commands.Group(
         name="welcome",
         description="Commands to setup welcome for new members.",
@@ -53,7 +63,7 @@ class Welcome(commands.Cog):
         return mime and mime[6:] in self._img_types and suffix in self._img_types
 
     async def fetch_welcome_msg(self, guild_id: int):
-        msg = await remote_config.get_json(self._WELCOME_KEY, guild_id, "message")
+        msg: _MsgCfg = await remote_config.get_json(self._WELCOME_KEY, guild_id, "message")  # type: ignore # fmt: skip
         msg = msg or await remote_config.get_json(self._WELCOME_KEY, 0, "message")
         msg = msg or self._DEFAULT_MSG
         return msg
@@ -76,11 +86,11 @@ class Welcome(commands.Cog):
                 await member.add_roles(*roles, reason="Default roles")
         # 检查系统频道并发送欢迎消息
         if guild.system_channel:
-            msg_obj = await self.fetch_welcome_msg(guild.id)
+            msg_cfg = await self.fetch_welcome_msg(guild.id)
             builder = WelcomeMessageBuilder(
                 VarParser.from_member_join(self.bot, member)
             )
-            msg_data = builder.build(msg_obj)
+            msg_data = builder.build(msg_cfg)
             await guild.system_channel.send(**msg_data)
 
     @group_welcome.command(name="enable", description="Switch welcome features, by default all False.")  # fmt: skip
@@ -118,11 +128,11 @@ class Welcome(commands.Cog):
     async def welcome_message(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         # 获取消息对象
-        msg_obj = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
+        msg_cfg = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
         # 生成消息
         builder = WelcomeMessageBuilder(VarParser.from_interaction(interaction))
-        msg_data = builder.build(msg_obj)
-        view = WelcomeMessageView(msg_obj=msg_obj, builder=builder)
+        msg_data = builder.build(msg_cfg)
+        view = WelcomeMessageView(msg_cfg=msg_cfg, builder=builder)
         msg = await interaction.followup.send(**msg_data, view=view)
         view.response_msg = msg
 
@@ -224,12 +234,12 @@ class Welcome(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=private)
         # 获取消息对象
-        msg_obj = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
+        msg_cfg = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
         # 生成消息
         builder = WelcomeMessageBuilder(
             VarParser.from_interaction(interaction, user=member)
         )
-        msg_data = builder.build(msg_obj)
+        msg_data = builder.build(msg_cfg)
         await interaction.followup.send(**msg_data)
 
 
@@ -238,31 +248,31 @@ class WelcomeMessageBuilder:
         self.parser = parser
         self.member: discord.Member = parser.context.member  # type: ignore
 
-    def build(self, obj: dict[str, Any]):
-        obj_copy = {}
-        for k, v in obj.items():
+    def build(self, config: _MsgCfg):
+        cfg_copy = config.copy()
+        for k, v in cfg_copy.items():
             if isinstance(v, str):
                 v = self.parser.parse(v)
-            obj_copy[k] = v
-        if not obj_copy["color"]:
+                cfg_copy[k] = v
+        if not cfg_copy["color"]:
             color = None
         else:
-            color = discord.Color.from_str(obj_copy["color"])
+            color = discord.Color.from_str(cfg_copy["color"])
         embed = (
             discord.Embed(
                 color=color,
-                title=obj_copy["title"],
-                description=obj_copy["content"],
+                title=cfg_copy["title"],
+                description=cfg_copy["content"],
             )
-            .set_footer(text=obj_copy["footer"])
-            .set_image(url=obj_copy["image"])
+            .set_footer(text=cfg_copy["footer"])
+            .set_image(url=cfg_copy["image"])
         )
-        if obj_copy["showAvatar"]:
+        if cfg_copy["showAvatar"]:
             embed.set_author(
                 name=self.member.display_name,
                 icon_url=self.member.display_avatar.url,
             )
-        content = self.member.mention if obj_copy["ping"] else None
+        content = self.member.mention if cfg_copy["ping"] else None
         return {
             "content": content,
             "embed": embed,
@@ -270,7 +280,7 @@ class WelcomeMessageBuilder:
 
 
 class WelcomeMessageView(AutoDisableView):
-    def __init__(self, *, msg_obj: dict[str, Any], builder: WelcomeMessageBuilder):
+    def __init__(self, *, msg_cfg: _MsgCfg, builder: WelcomeMessageBuilder):
         # 设置为840秒，因为900秒后消息会到期超时
         super().__init__(timeout=840)
         self.add_item(
@@ -282,23 +292,23 @@ class WelcomeMessageView(AutoDisableView):
                 row=2,
             )
         )
-        self.msg_obj = msg_obj
+        self.msg_cfg = msg_cfg
         self.builder = builder
 
     async def update_message(self, interaction: Interaction):
-        msg_data = self.builder.build(self.msg_obj)
+        msg_data = self.builder.build(self.msg_cfg)
         await interaction.edit_original_response(**msg_data)
 
     @ui.button(label="Toggle ping", row=0)
     async def toggle_ping(self, interaction: Interaction, button):
         await interaction.response.defer()
-        self.msg_obj["ping"] = not self.msg_obj["ping"]
+        self.msg_cfg["ping"] = not self.msg_cfg["ping"]
         await self.update_message(interaction)
 
     @ui.button(label="Toggle avatar", row=0)
     async def toggle_avatar(self, interaction: Interaction, button):
         await interaction.response.defer()
-        self.msg_obj["showAvatar"] = not self.msg_obj["showAvatar"]
+        self.msg_cfg["showAvatar"] = not self.msg_cfg["showAvatar"]
         await self.update_message(interaction)
 
     @ui.button(label="Title", row=1)
@@ -306,12 +316,12 @@ class WelcomeMessageView(AutoDisableView):
         modal = ShortTextModal(
             title="Set message title",
             label="Title (Optional)",
-            default=self.msg_obj["title"],
+            default=self.msg_cfg["title"],
             required=False,
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.msg_obj["title"] = modal.text.value
+        self.msg_cfg["title"] = modal.text.value
         await self.update_message(interaction)
 
     @ui.button(label="Content", row=1)
@@ -319,11 +329,11 @@ class WelcomeMessageView(AutoDisableView):
         modal = LongTextModal(
             title="Set message content",
             label="Content",
-            default=self.msg_obj["content"],
+            default=self.msg_cfg["content"],
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.msg_obj["content"] = modal.text.value
+        self.msg_cfg["content"] = modal.text.value
         await self.update_message(interaction)
 
     @ui.button(label="Footer", row=1)
@@ -331,12 +341,12 @@ class WelcomeMessageView(AutoDisableView):
         modal = ShortTextModal(
             title="Set message footer",
             label="Footer (Optional)",
-            default=self.msg_obj["footer"],
+            default=self.msg_cfg["footer"],
             required=False,
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        self.msg_obj["footer"] = modal.text.value
+        self.msg_cfg["footer"] = modal.text.value
         await self.update_message(interaction)
 
     @ui.button(label="Color", row=1)
@@ -344,7 +354,7 @@ class WelcomeMessageView(AutoDisableView):
         modal = ShortTextModal(
             title="Set border color",
             label="Color (Optional)",
-            default=self.msg_obj["color"],
+            default=self.msg_cfg["color"],
             required=False,
         )
         await interaction.response.send_modal(modal)
@@ -361,7 +371,7 @@ class WelcomeMessageView(AutoDisableView):
                     ephemeral=True,
                 )
                 return
-        self.msg_obj["color"] = color
+        self.msg_cfg["color"] = color
         await self.update_message(interaction)
 
     @ui.button(label="Image", row=1)
@@ -369,19 +379,19 @@ class WelcomeMessageView(AutoDisableView):
         modal = ShortTextModal(
             title="Set image url",
             label="Image url (Optional)",
-            default=self.msg_obj["image"],
+            default=self.msg_cfg["image"],
             required=False,
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
-        old_image = self.msg_obj["image"]
+        old_image = self.msg_cfg["image"]
         try:
-            self.msg_obj["image"] = modal.text.value
+            self.msg_cfg["image"] = modal.text.value
             await self.update_message(interaction)
         except discord.HTTPException as ex:
             if ex.status == 400:
                 # url格式错误
-                self.msg_obj["image"] = old_image
+                self.msg_cfg["image"] = old_image
                 await interaction.followup.send(
                     embed=fail("Invalid url format"),
                     ephemeral=True,
@@ -409,7 +419,7 @@ class WelcomeMessageView(AutoDisableView):
         guild: discord.Guild = interaction.guild  # type: ignore
         try:
             await remote_config.merge_json(
-                Welcome._WELCOME_KEY, guild.id, "message", value=self.msg_obj
+                Welcome._WELCOME_KEY, guild.id, "message", value=self.msg_cfg
             )
             embed = success("Welcome message saved")
             if not guild.system_channel:

@@ -1,4 +1,4 @@
-from typing import Any, NamedTuple, overload
+from typing import Any, NamedTuple, TypedDict, overload
 from zoneinfo import ZoneInfo
 
 from discord import ButtonStyle, Interaction, app_commands, ui
@@ -26,6 +26,11 @@ __all__ = (
 class UserProfileData(NamedTuple):
     hidden: bool
     timezone: ZoneInfo | None
+
+
+class _UPData(TypedDict):
+    hidden: bool
+    timezone: str
 
 
 class FieldTransformer(app_commands.Transformer):
@@ -59,9 +64,9 @@ class UserProfile(commands.Cog):
 
     @classmethod
     async def user(cls, user_id: int, guild_id=0, merge=True):
-        data = await remote_config.get_json(cls._PROFILE_KEY, user_id, guild_id) or {}
+        data: _UPData = await remote_config.get_json(cls._PROFILE_KEY, user_id, guild_id) or {}  # type: ignore # fmt: skip
         if merge and guild_id != 0:
-            main = await remote_config.get_json(cls._PROFILE_KEY, user_id, 0) or {}
+            main: _UPData = await remote_config.get_json(cls._PROFILE_KEY, user_id, 0) or {}  # type: ignore # fmt: skip
             data = main | data
         hidden = data.get("hidden", False)
         timezone = None
