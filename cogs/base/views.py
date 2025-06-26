@@ -22,6 +22,9 @@ class AutoDisableView(ui.View):
                 item.disabled = True  # type: ignore
             try:
                 await self.response_msg.edit(view=self)
+            except discord.NotFound:
+                # 忽略消息不存在（已被删除）异常
+                pass
             except discord.HTTPException as ex:
                 # 忽略webhook到期超时，和消息不存在（已被删除）异常
                 if ex.code in [401, 404]:
