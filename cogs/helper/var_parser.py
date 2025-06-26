@@ -69,12 +69,18 @@ class VarContext:
 
 
 def _member_pos(member: Member):
-    members = sorted(
-        member.guild.members,
-        key=lambda m: m.joined_at or datetime.max,
-    )
+    # 筛选掉bot用户
+    members = [m for m in member.guild.members if not m.bot]
+    # 按加入时间排序
+    members = sorted(members, key=lambda m: m.joined_at or datetime.max)
     pos = members.index(member) + 1
     return pos
+
+
+def _member_count(guild: Guild):
+    # 筛选掉bot用户
+    members = [m for m in guild.members if not m.bot]
+    return len(members)
 
 
 def _id(value: str):
@@ -131,7 +137,7 @@ class VarParser:
         "server.icon":        lambda c, _: c.guild and getattr(c.guild.icon, "url", None),
         "server.banner":      lambda c, _: c.guild and getattr(c.guild.banner, "url", None),
         "server.description": lambda c, _: c.guild and c.guild.description,
-        "server.memberCount": lambda c, _: c.guild and str(c.guild.member_count),
+        "server.memberCount": lambda c, _: c.guild and str(_member_count(c.guild)),
         "randomImage":        lambda c, _: f"https://picsum.photos/seed/{datetime.now().timestamp()}/640/360",
         "now":                lambda c, r: timestamp(datetime.now(), r["style"]),
         "@": _user,

@@ -78,6 +78,9 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
+        # welcome功能忽略bot用户
+        if member.bot:
+            return
         guild = member.guild
         # 检查权限并设置角色
         if guild.me.guild_permissions.manage_roles:
@@ -127,7 +130,7 @@ class Welcome(commands.Cog):
     @group_welcome.command(name="message", description="Edit welcome message.")
     async def welcome_message(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
-        # 获取消息对象
+        # 获取消息配置
         msg_cfg = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
         # 生成消息
         builder = WelcomeMessageBuilder(VarParser.from_interaction(interaction))
@@ -233,7 +236,7 @@ class Welcome(commands.Cog):
         private: bool = True,
     ):
         await interaction.response.defer(ephemeral=private)
-        # 获取消息对象
+        # 获取消息配置
         msg_cfg = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
         # 生成消息
         builder = WelcomeMessageBuilder(
