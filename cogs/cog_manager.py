@@ -1,5 +1,8 @@
+from typing import Annotated
+
 from discord.ext import commands
 
+from .emoji_manager import Emojis
 from .helper.formats import code_block
 
 __all__ = ("CogManager",)
@@ -21,7 +24,7 @@ class CogManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def cog_check(self, ctx: commands.Context):
+    async def cog_check(self, ctx: commands.Context):  # type: ignore
         # 限制只有owner可以调用这些命令
         return await commands.is_owner().predicate(ctx)
 
@@ -42,25 +45,31 @@ class CogManager(commands.Cog):
             await ctx.send(f"`No function named {cog_name}.`")
         else:
             await self.bot.add_cog(cog, override=True)
+            await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @commands.command()
     async def disable(self, ctx: commands.Context, cog_name):
         # 禁止禁用自己的功能
         if cog_name == CogManager.__name__ or self.bot.get_cog(cog_name) is None:
             await ctx.send(f"`No function named {cog_name}.`")
-        await self.bot.remove_cog(cog_name)
+        else:
+            await self.bot.remove_cog(cog_name)
+            await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @commands.command()
-    async def load(self, ctx, ext_name: ExtName):
+    async def load(self, ctx: commands.Context, ext_name: Annotated[str, ExtName]):
         await self.bot.load_extension(ext_name)
+        await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @commands.command()
-    async def unload(self, ctx, ext_name: ExtName):
+    async def unload(self, ctx: commands.Context, ext_name: Annotated[str, ExtName]):
         await self.bot.unload_extension(ext_name)
+        await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @commands.command()
-    async def reload(self, ctx, ext_name: ExtName):
+    async def reload(self, ctx: commands.Context, ext_name: Annotated[str, ExtName]):
         await self.bot.reload_extension(ext_name)
+        await ctx.message.add_reaction(Emojis("success", "✅"))
 
     @load.error
     @unload.error
@@ -87,7 +96,7 @@ class CogManager(commands.Cog):
             await ctx.send(msg)
         elif (
             isinstance(error, commands.ExtensionNotLoaded)
-            and ctx.command.name == self.reload.name
+            and ctx.command.name == self.reload.name  # type: ignore
         ):
             # 卸载未加载的功能
             await ctx.send(f"`No extension named {ext_name} was loaded.`")
