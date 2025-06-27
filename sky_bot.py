@@ -31,15 +31,17 @@ class SkyBot(commands.Bot):
         self.app_emojis: MappingProxyType[str, discord.Emoji] = MappingProxyType({})
 
     async def setup_hook(self) -> None:
-        # 只在需要时导入，避免循环引用问题
-        from cogs.cog_manager import CogManager
-
         await self.fetch_application_emojis()
         # 加载初始扩展
-        await self.add_cog(CogManager(self))
         for extension in self.initial_extensions:
             extension = "cogs." + extension
             await self.load_extension(extension)
+
+        # 最后再加载 cog_manager 因为其依赖 emoji_manager
+        # 只在需要时导入，避免循环引用问题
+        from cogs.cog_manager import CogManager
+
+        await self.add_cog(CogManager(self))
 
     async def on_ready(self):
         print(f"We have logged in as {self.user}")
