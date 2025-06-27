@@ -2,16 +2,19 @@ import calendar
 import re
 from datetime import datetime
 
-from discord import Interaction, app_commands
+from discord import AppCommandOptionType, Interaction, app_commands
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from .times import sky_datetime, sky_time_now
+from .times import sky_datetime, sky_time_now, utcnow
 
 __all__ = (
     "MessageTransformer",
     "DateTransformer",
     "date_autocomplete",
+    "YearTransformer",
+    "MonthTransformer",
+    "DayTransformer",
 )
 
 
@@ -76,3 +79,86 @@ async def date_autocomplete(interaction: Interaction, value: str):
             results = [value[:-1] + str(d) for d in days]
     choices = [Choice(name=r, value=r) for r in results]
     return choices
+
+
+class YearTransformer(app_commands.Transformer):
+    @property
+    def type(self):
+        return AppCommandOptionType.integer
+
+    @property
+    def min_value(self):
+        return 1
+
+    @property
+    def max_value(self):
+        return 9999
+
+    async def transform(self, interaction, value: int):
+        return value
+
+    async def autocomplete(self, interaction, value: str):  # type: ignore
+        choices: list[Choice[int]] = []
+        if value:
+            return choices
+        y = utcnow().year
+        years = list(range(y - 2, y + 11))
+        choices = [Choice(name=str(y), value=y) for y in years]
+        return choices
+
+
+class MonthTransformer(app_commands.Transformer):
+    @property
+    def type(self):
+        return AppCommandOptionType.integer
+
+    @property
+    def min_value(self):
+        return 1
+
+    @property
+    def max_value(self):
+        return 12
+
+    @property
+    def choices(self):  # type: ignore
+        return [Choice(name=str(m), value=m) for m in range(1, 13)]
+
+    async def transform(self, interaction, value: int):
+        return value
+
+
+class DayTransformer(app_commands.Transformer):
+    @property
+    def type(self):
+        return AppCommandOptionType.integer
+
+    @property
+    def min_value(self):
+        return 1
+
+    @property
+    def max_value(self):
+        return 31
+
+    async def transform(self, interaction, value: int):
+        return value
+
+    async def autocomplete(self, interaction: Interaction, value: str):  # type: ignore
+        now = utcnow()
+        y = interaction.namespace.year or now.year
+        m = interaction.namespace.month or now.month
+        day_range = calendar.monthrange(y, m)[1]
+        if not value:
+            start = now.day - 2
+            start = max(1, min(start, day_range - 6))
+            days = range(start, start + 7)
+        else:
+            try:
+                v = int(value)
+                days = range(1, day_range + 1)
+                days = [d for d in days if str(d).startswith(str(v))]
+            except ValueError:
+                days = []
+        choices = [Choice(name=str(d), value=d) for d in days]
+        return choices

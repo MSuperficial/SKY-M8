@@ -1,3 +1,4 @@
+import calendar
 import json
 import re
 from datetime import datetime, timedelta
@@ -15,7 +16,7 @@ from utils.remote_config import remote_config
 from ..base.live_update import LiveUpdateCog
 from ..base.views import AutoDisableView
 from ..emoji_manager import Emojis
-from ..helper.converters import DateTransformer, date_autocomplete
+from ..helper.converters import DayTransformer, MonthTransformer, YearTransformer
 from ..helper.embeds import fail, success
 from ..helper.times import sky_datetime, sky_time, sky_time_now
 from .data.shard import (
@@ -150,34 +151,44 @@ class ShardCalendar(
         private="Only you can see the message, by default True.",
     )
     async def shards(self, interaction: Interaction, private: bool = True):
-        await interaction.response.defer(ephemeral=private, thinking=True)
+        await interaction.response.defer(ephemeral=private)
         msg_data = await self.get_live_message_data(persistent=False)
-        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data)
         view: ShardNavView = msg_data["view"]
         view.response_msg = msg
 
     @group_shard.command(name="date", description="View shards info of specific date.")
     @app_commands.describe(
-        date="Date to view in Year/Month/Day format.",
+        day="The day of month (1~31).",
+        month="The month (1~12), by default current month.",
+        year="The year (1~9999), by default current year.",
         private="Only you can see the message, by default True.",
     )
-    @app_commands.autocomplete(date=date_autocomplete)
     async def shard_date(
         self,
         interaction: Interaction,
-        date: app_commands.Transform[datetime, DateTransformer],
+        day: app_commands.Transform[int, DayTransformer],
+        month: app_commands.Transform[int, MonthTransformer] | None = None,
+        year: app_commands.Transform[int, YearTransformer] | None = None,
         private: bool = True,
     ):
-        await interaction.response.defer(ephemeral=private, thinking=True)
-        # 日期格式错误
-        if not date:
-            await interaction.followup.send(
-                embed=fail("Date format error"),
-                ephemeral=private,
+        date = sky_time_now()
+        month, year = month or date.month, year or date.year
+        try:
+            date = sky_datetime(year, month, day)
+        except ValueError:
+            # 日期格式错误
+            day_range = calendar.monthrange(year, month)[1]
+            await interaction.response.send_message(
+                embed=fail(
+                    "Out of range", f"Maximum `day` is `{day_range}` for the month."
+                ),
+                ephemeral=True,
             )
             return
+        await interaction.response.defer(ephemeral=private)
         msg_data = await self.get_live_message_data(date=date, persistent=False)
-        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data)
         view: ShardNavView = msg_data["view"]
         view.response_msg = msg
 
@@ -192,52 +203,54 @@ class ShardCalendar(
         days: int,
         private: bool = True,
     ):
-        await interaction.response.defer(ephemeral=private, thinking=True)
+        await interaction.response.defer(ephemeral=private)
         now = sky_time_now()
         date = now + timedelta(days=days)
         msg_data = await self.get_live_message_data(date=date, persistent=False)
-        msg = await interaction.followup.send(**msg_data, ephemeral=private)
+        msg = await interaction.followup.send(**msg_data)
         view: ShardNavView = msg_data["view"]
         view.response_msg = msg
 
     @group_shard.command(name="record", description="Record shards info of a specific date.")  # fmt: skip
     @app_commands.describe(
         memory="Shard memory of the day.",
+        day="The day of month (1~31), by default today.",
+        month="The month (1~12), by default current month.",
+        year="The year (1~9999), by default current year.",
         author="Change your name for credit, optional.",
-        date="Date to record in Year/Month/Day format, by default today.",
     )
-    @app_commands.autocomplete(date=date_autocomplete)
     async def shard_record(
         self,
         interaction: Interaction,
         memory: MemoryType,
+        day: app_commands.Transform[int, DayTransformer] | None = None,
+        month: app_commands.Transform[int, MonthTransformer] | None = None,
+        year: app_commands.Transform[int, YearTransformer] | None = None,
         author: str = "",
-        date: str = "",
     ):
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        tsfm = DateTransformer()
-        dt = await tsfm.transform(interaction, date)
-        # 日期格式错误
-        if not dt:
-            await interaction.followup.send(
-                embed=fail("Date format error"),
+        date = sky_time_now()
+        day, month, year = day or date.day, month or date.month, year or date.year
+        try:
+            date = sky_datetime(year, month, day)
+        except ValueError:
+            # 日期格式错误
+            day_range = calendar.monthrange(year, month)[1]
+            await interaction.response.send_message(
+                embed=fail(
+                    "Out of range", f"Maximum `day` is `{day_range}` for the month."
+                ),
                 ephemeral=True,
             )
             return
-        info = get_shard_info(dt)
+        await interaction.response.defer(ephemeral=True)
+        info = get_shard_info(date)
         if not info.has_shard:
             # 当日没有碎石事件
-            await interaction.followup.send(
-                embed=fail("It's a no shard day"),
-                ephemeral=True,
-            )
+            await interaction.followup.send(embed=fail("It's a no shard day"))
             return
         elif info.type == ShardType.Black:
             # 黑石事件没有回忆场景
-            await interaction.followup.send(
-                embed=fail("Black shard doesn't have shard memory"),
-                ephemeral=True,
-            )
+            await interaction.followup.send(embed=fail("Black shard has no memory"))
             return
         try:
             extra = ShardExtra(
@@ -247,18 +260,12 @@ class ShardCalendar(
                 memory_by=author.strip(),
                 memory_timestamp=interaction.created_at.timestamp(),
             )
-            await self.set_extra_info(dt, extra)
+            await self.set_extra_info(date, extra)
             # 成功记录
-            await interaction.followup.send(
-                embed=success("Successfully recorded"),
-                ephemeral=True,
-            )
+            await interaction.followup.send(embed=success("Successfully recorded"))
         except Exception as ex:
             # 其他错误
-            await interaction.followup.send(
-                embed=fail("Error while recording", ex),
-                ephemeral=True,
-            )
+            await interaction.followup.send(embed=fail("Error while recording", ex))
             return
         # 记录回忆后更新所有live消息
         await self.update_live_msg()

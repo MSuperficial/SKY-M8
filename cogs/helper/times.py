@@ -3,12 +3,17 @@ from zoneinfo import ZoneInfo
 
 __all__ = (
     "SKY_TIMEZONE",
+    "utcnow",
     "sky_time_now",
     "sky_datetime",
     "sky_time",
 )
 
 SKY_TIMEZONE = ZoneInfo("America/Los_Angeles")
+
+
+def utcnow():
+    return datetime.now(ZoneInfo("UTC"))
 
 
 def sky_time_now() -> datetime:
