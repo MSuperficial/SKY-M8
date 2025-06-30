@@ -15,7 +15,7 @@ from ..helper.tzutils import (
     format_hint,
     tz_autocomplete,
 )
-from .views import TimezoneDisplay
+from .display import TimezoneDisplay
 
 __all__ = (
     "UserProfileData",

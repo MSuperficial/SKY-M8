@@ -9,8 +9,8 @@ from sky_bot import SkyBot
 
 from ..base.views import AutoDisableView
 from ..helper.embeds import fail
+from .display import TimezoneDisplay
 from .profile import UserProfile
-from .views import TimezoneDisplay
 
 
 class Clock(commands.Cog):
