@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence, TypeAlias
 from zoneinfo import ZoneInfo
 
@@ -6,10 +6,10 @@ import discord
 
 from ..helper import formats, tzutils
 
+User: TypeAlias = discord.User | discord.Member
+
 
 class TimezoneDisplay:
-    User: TypeAlias = discord.User | discord.Member
-
     def _fields(self, dt: datetime):
         fields = {}
 
@@ -97,7 +97,16 @@ class TimezoneDisplay:
         base_dt = now.astimezone(base_tz)
         fields = self._cmp_fields(base_dt)
         desc = f"`{fields['Local Time']}`\n`{fields['Time Zone']}`"
-        for user, tzinfo in users[1:]:
+
+        def _key(u: tuple[User, ZoneInfo | None]):
+            if u[1] is None:
+                return timedelta(days=1)
+            k = u[1].utcoffset(now)
+            return k if k is not None else timedelta(days=1)
+
+        # 按 UTC Offset 升序排序，未提供时区的排最后
+        others = sorted(users[1:], key=_key)
+        for user, tzinfo in others:
             if not tzinfo:
                 desc += f"\n### {user.mention}\n*Time zone not provided!*"
                 continue
