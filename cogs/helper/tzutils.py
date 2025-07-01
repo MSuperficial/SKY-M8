@@ -64,6 +64,9 @@ class TimezoneFinder:
             score_cutoff=90,
             limit=2,
         )
+        # 如果没有匹配则返回
+        if len(matches) == 0:
+            return None
         # 如果不存在最高分则返回
         if len(matches) == 2 and matches[0][1] == matches[1][1]:
             return None
