@@ -38,7 +38,10 @@ class DailyClock(
         if current_end is not None:
             msg += f"-# 🔹 Current ends {timestamp(current_end, 'R')}.\n"
         # 下次事件开始时间
-        msg += f"-# 🔸 Next at {timestamp(next_begin, 't')}, {timestamp(next_begin, 'R')}."  # fmt: skip
+        if next_begin is not None:
+            msg += f"-# 🔸 Next at {timestamp(next_begin, 't')}, {timestamp(next_begin, 'R')}."
+        else:
+            msg += "-# 🔸 No more event for today."
         return msg
 
     async def get_all_daily_event_msg(self, when: datetime, header=True, footer=True):

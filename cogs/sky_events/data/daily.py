@@ -136,7 +136,7 @@ def get_daily_event_time(now: datetime, event_data: DailyEventData):
     minutes_passed = now_time.hour * 60 + now_time.minute
     # 计算自上次事件开始经过的分钟数
     minutes_from_last = (minutes_passed - event_data.offset) % event_data.period
-    # 如果当前事件正在进行，计算当前时间结束的时间
+    # 如果当前事件正在进行，计算当前事件结束的时间
     current_end_time = None
     if minutes_from_last < event_data.duration:
         current_end_time = now_time + timedelta(
@@ -146,4 +146,8 @@ def get_daily_event_time(now: datetime, event_data: DailyEventData):
     next_begin_time = now_time + timedelta(
         minutes=event_data.period - minutes_from_last
     )
+    # 根据条件判断是否有下次事件
+    days_of_month = event_data.days_of_month
+    if days_of_month is not None and next_begin_time.day not in days_of_month:
+        next_begin_time = None
     return current_end_time, next_begin_time
