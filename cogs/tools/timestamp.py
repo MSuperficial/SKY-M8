@@ -39,7 +39,7 @@ class TimestampMaker(commands.Cog):
         others: discord.User | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
-        guild_id = interaction.guild_id if interaction.guild_id else 0
+        guild_id = interaction.guild_id or 0
         # 使用时区的优先级 timezone > others > UserProfile
         tzinfo = None
         if timezone:

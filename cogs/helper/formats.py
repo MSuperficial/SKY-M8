@@ -44,7 +44,7 @@ def tzdiff(base: datetime, other: datetime):
     that_utc = other.utcoffset()
     delta = that_utc - this_utc  # type: ignore
     minutes = int(delta.total_seconds() / 60)
-    sign = "+" if minutes > 0 else "-"
+    sign = "+" if minutes >= 0 else "-"
     hours, minutes = divmod(abs(minutes), 60)
     diff = f"{sign}{hours:0>2d}:{minutes:0>2d}"
     return diff

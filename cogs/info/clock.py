@@ -5,7 +5,7 @@ import discord
 from discord import Interaction, app_commands, ui
 from discord.ext import commands
 
-from sky_bot import SkyBot
+from sky_bot import AppUser, SkyBot
 
 from ..base.views import AutoDisableView
 from ..helper.embeds import fail
@@ -38,7 +38,7 @@ class Clock(commands.Cog):
     async def _view_someones_clock(self, interaction: Interaction, who: discord.User):
         await interaction.response.defer(ephemeral=True)
         user = interaction.user
-        guild_id = interaction.guild_id if interaction.guild_id else 0
+        guild_id = interaction.guild_id or 0
         hidden, tz = await UserProfile.fields(
             who.id,
             *["hidden", "timezone"],
@@ -54,17 +54,17 @@ class Clock(commands.Cog):
             await interaction.followup.send(embed=fail("No time zone", desc))
             return
         tzinfo = ZoneInfo(tz)
-        user_tz: str | None = await UserProfile.fields(
-            user.id,
-            "timezone",
-            guild_id=guild_id,
-        )
         display = TimezoneDisplay()
         # 只有在查看对象是别人，且用户自己设置了时区时，才显示时差信息
-        if who != user and user_tz:
-            embed = display.diff_embed(user, ZoneInfo(user_tz), who, tzinfo)
-        else:
-            embed = display.embed(who, tzinfo)
+        user_tzinfo = None
+        if who != user:
+            user_tz: str | None = await UserProfile.fields(
+                user.id,
+                "timezone",
+                guild_id=guild_id,
+            )
+            user_tzinfo = ZoneInfo(user_tz) if user_tz else None
+        embed = display.embed(who, tzinfo, user_tzinfo)
         await interaction.followup.send(embed=embed)
 
     @group_clock.command(name="view", description="View someone's local time.")
@@ -78,50 +78,40 @@ class Clock(commands.Cog):
     async def menu_view(self, interaction: Interaction, who: discord.User):
         await self._view_someones_clock(interaction, who)
 
-    @group_clock.command(name="compare", description="Compare a list of user's local times.")  # fmt: skip
+    @group_clock.command(name="compare", description="Compare multiple user's local times.")  # fmt: skip
     @app_commands.describe(
-        first="The base user time zone to compute time difference with others.",
-        public="Show the message to everyone, by default only you can see.",
+        user1="The user to compare with.",
+        user2="The user to compare with.",
+        user3="The user to compare with.",
+        user4="The user to compare with.",
+        show_message="Show message to everyone, this will hide DIFF info and your time zone (if hidden), by default False.",
     )
     async def clock_compare(
         self,
         interaction: Interaction,
-        first: discord.User,
-        second: discord.User,
-        third: discord.User | None = None,
-        fourth: discord.User | None = None,
-        public: bool | None = False,
+        user1: discord.User,
+        user2: discord.User,
+        user3: discord.User | None = None,
+        user4: discord.User | None = None,
+        show_message: bool = False,
     ):
         await interaction.response.defer(ephemeral=True)
         # 筛选掉None、Bot用户和重复用户
-        users: list[discord.User] = [u for u in [first, second, third, fourth] if u]
+        users = [u for u in [user1, user2, user3, user4] if u]
         users = [u for u in users if not u.bot]
         users = list(dict.fromkeys(users))
         if len(users) < 2:
             await interaction.followup.send(
-                embed=fail("At least two users (not bots) needed"),
+                embed=fail("At least two users (not bot) needed"),
             )
             return
-        guild_id = interaction.guild_id if interaction.guild_id else 0
-        # 第一个用户的时区作为基准，必须不为空
-        base = users[0]
-        hidden, tz = await UserProfile.fields(
-            base.id,
-            *["hidden", "timezone"],
-            guild_id=guild_id,
-        )
-        if (base != interaction.user and hidden) or not tz:
-            await interaction.followup.send(
-                embed=fail(
-                    "No time zone",
-                    f"User {users[0].mention} does not provide time zone",
-                ),
-            )
-            return
-        view = ClockCompareView(guild_id, base, ZoneInfo(tz), users[1:])
+        # 当前用户的时区作为基准
+        base = interaction.user
+        guild_id = interaction.guild_id or 0
+        view = ClockCompareView(guild_id, users, base, show_message)
         msg_data = await view.create_message()
-        if public:
-            # 公开情况下，使用channel.send发送消息，但仍隐藏选择框
+        if show_message:
+            # 公开情况下，使用channel.send发送消息，但仍隐藏UI组件
             clock_msg = await interaction.channel.send(**msg_data)  # type: ignore
             response_msg = await interaction.followup.send(view=view)
         else:
@@ -137,48 +127,57 @@ class ClockCompareView(AutoDisableView):
     def __init__(
         self,
         guild_id: int,
-        base: discord.User,
-        base_tz: ZoneInfo,
-        extras: list[discord.User],
+        users: list[AppUser],
+        base: AppUser,
+        show: bool,
     ):
         super().__init__(timeout=300)
         self.guild_id = guild_id
+        self.users = users
         self.base = base
-        self.base_tz = base_tz
-        self.extras = extras
-        self.select_users.default_values = extras
+        self.show = show
+        self.select_users.default_values = users
         self.clock_msg: discord.Message
 
     async def create_message(self) -> dict[str, Any]:
+        hidden, tz = await UserProfile.fields(
+            self.base.id,
+            *["hidden", "timezone"],
+            guild_id=self.guild_id,
+        )
+        base_tz = ZoneInfo(tz) if tz else None
+        hide_base = self.show and hidden
         infos = []
-        for u in self.extras:
+        for u in self.users:
+            if u == self.base:
+                infos.append((u, None if hide_base else base_tz))
+                continue
             hidden, tz = await UserProfile.fields(
                 u.id,
                 *["hidden", "timezone"],
                 guild_id=self.guild_id,
             )
             infos.append((u, ZoneInfo(tz) if not hidden and tz else None))
-        infos.insert(0, (self.base, self.base_tz))
         display = TimezoneDisplay()
-        embed = display.compare_embed(infos)
+        embed = display.compare_embed(infos, None if self.show else base_tz)
         return {"embed": embed}
 
     @ui.select(
         cls=ui.UserSelect,
-        placeholder="Select extra users to compare with...",
-        min_values=1,
+        placeholder="Select users to compare with...",
+        min_values=2,
         max_values=25,
     )
     async def select_users(self, interaction: Interaction, select: ui.UserSelect):
         await interaction.response.defer()
-        # 筛选掉基准用户和Bot用户
-        users = [u for u in select.values if u != self.base and not u.bot]
-        if len(users) < 1:
+        # 筛选掉Bot用户
+        users = [u for u in select.values if not u.bot]
+        if len(users) < 2:
             await interaction.followup.send(
-                embed=fail("At least one extra users (not bots) needed"),
+                embed=fail("At least two users (not bot) needed"),
                 ephemeral=True,
             )
             return
-        self.extras = users
+        self.users = users
         msg_data = await self.create_message()
         await self.clock_msg.edit(**msg_data)

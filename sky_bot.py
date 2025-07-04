@@ -1,6 +1,6 @@
 from logging import getLogger
 from types import MappingProxyType
-from typing import Generator, List, Optional
+from typing import Generator, List, Optional, TypeAlias
 
 import discord
 from discord import app_commands
@@ -14,6 +14,8 @@ __all__ = (
 )
 
 _log = getLogger(__name__)
+
+AppUser: TypeAlias = discord.User | discord.Member
 
 
 class SkyBot(commands.Bot):
