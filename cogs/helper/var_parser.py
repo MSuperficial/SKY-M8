@@ -6,7 +6,7 @@ import discord
 from discord import Guild, Interaction, Member, User
 from discord.utils import get
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 from .formats import ordinal, timestamp
@@ -33,7 +33,7 @@ class VarContext:
     def __init__(
         self,
         *,
-        bot: SkyBot,
+        bot: SkyM8,
         guild: Guild | None = None,
         channel: InteractionChannel | None = None,
         user: User | Member | None = None,
@@ -59,7 +59,7 @@ class VarContext:
         )
 
     @classmethod
-    def from_member_join(cls, bot: SkyBot, member: Member):
+    def from_member_join(cls, bot: SkyM8, member: Member):
         return cls(
             bot=bot,
             guild=member.guild,
@@ -164,7 +164,7 @@ class VarParser:
         return cls(VarContext.from_interaction(interaction, user=user))
 
     @classmethod
-    def from_member_join(cls, bot: SkyBot, member: Member):
+    def from_member_join(cls, bot: SkyM8, member: Member):
         return cls(VarContext.from_member_join(bot, member))
 
     def __init__(self, context: VarContext):

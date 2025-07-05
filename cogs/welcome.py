@@ -6,7 +6,7 @@ import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands, tasks
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 from .base.views import AutoDisableView, LongTextModal, ShortTextModal
@@ -44,7 +44,7 @@ class Welcome(commands.Cog):
         allowed_installs=app_commands.AppInstallationType(user=False),
     )
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         self.bot = bot
         self._img_types = ["jpg", "jpeg", "png", "webp", "gif"]
 
@@ -487,5 +487,5 @@ class WelcomeRolesView(AutoDisableView):
             await interaction.followup.send(embed=fail("Error while saving", ex))
 
 
-async def setup(bot: SkyBot):
+async def setup(bot: SkyM8):
     await bot.add_cog(Welcome(bot))

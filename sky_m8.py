@@ -10,7 +10,7 @@ from discord.utils import MISSING
 
 __all__ = (
     "MentionableTree",
-    "SkyBot",
+    "SkyM8",
 )
 
 _log = getLogger(__name__)
@@ -18,7 +18,7 @@ _log = getLogger(__name__)
 AppUser: TypeAlias = discord.User | discord.Member
 
 
-class SkyBot(commands.Bot):
+class SkyM8(commands.Bot):
     def __init__(self, *args, initial_extensions: list[str], **kwargs):
         super().__init__(
             allowed_installs=AppInstallationType(guild=True, user=True),
@@ -75,7 +75,7 @@ class SkyBot(commands.Bot):
 
 
 # fmt: off
-class MentionableTree(app_commands.CommandTree[SkyBot]):
+class MentionableTree(app_commands.CommandTree[SkyM8]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.application_commands: dict[Optional[int], List[app_commands.AppCommand]] = {}

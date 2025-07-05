@@ -7,7 +7,7 @@ from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
 from discord.utils import TimestampStyle, format_dt
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 
 from ..base.views import AutoDisableView, DateModal, TimeModal, TimeZoneModal
 from ..helper import formats, tzutils
@@ -23,7 +23,7 @@ __all__ = ("TimestampMaker",)
 
 
 class TimestampMaker(commands.Cog):
-    def __init__(self, bot: SkyBot) -> None:
+    def __init__(self, bot: SkyM8) -> None:
         self.bot = bot
 
     @app_commands.command(name="timestamp", description="Get formated discord timestamp, by default in your time zone.")  # fmt: skip

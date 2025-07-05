@@ -5,7 +5,7 @@ from typing import Any
 from discord.ext import commands
 from discord.utils import format_dt as timestamp
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 
 from ..base.live_update import LiveUpdateCog
 from ..helper.times import sky_time_now
@@ -27,7 +27,7 @@ class DailyClock(
     live_display_name="Sky Clock",
     live_update_interval={"minutes": 1},
 ):
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         super().__init__(bot)
 
     def get_daily_event_msg(self, when: datetime, event_data: DailyEventData):
@@ -81,5 +81,5 @@ class DailyClock(
         await asyncio.sleep(wait_second)
 
 
-async def setup(bot: SkyBot):
+async def setup(bot: SkyM8):
     await bot.add_cog(DailyClock(bot))

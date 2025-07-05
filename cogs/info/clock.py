@@ -7,7 +7,7 @@ from discord import Interaction, app_commands, ui
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from sky_bot import AppUser, SkyBot
+from sky_m8 import AppUser, SkyM8
 from utils.remote_config import remote_config
 
 from ..base.views import AutoDisableView, ShortTextModal
@@ -73,7 +73,7 @@ class Clock(commands.Cog):
         guild_id = user.guild.id if isinstance(user, discord.Member) else 0
         return await remote_config.delete_json(cls._GP_KEY, user.id, guild_id, name)
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         self.bot = bot
         # 手动添加菜单命令，dpy库不支持自动绑定
         self.cmd_menu_view = app_commands.ContextMenu(

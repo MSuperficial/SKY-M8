@@ -4,14 +4,14 @@ from typing import overload
 from discord import Emoji
 from discord.ext import commands
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 
 class EmojiManager(commands.Cog):
     _EMOJI_KEY = "emojis"
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         self.bot = bot
 
     async def cog_load(self):
@@ -74,5 +74,5 @@ class EmojiFinder:
 Emojis = EmojiFinder({})
 
 
-async def setup(bot: SkyBot):
+async def setup(bot: SkyM8):
     await bot.add_cog(EmojiManager(bot))

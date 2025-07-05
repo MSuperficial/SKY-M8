@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from sky_bot import MentionableTree, SkyBot
+from sky_m8 import MentionableTree, SkyM8
 
 if os.name == "nt":
     policy = asyncio.WindowsSelectorEventLoopPolicy()
@@ -15,7 +15,7 @@ if os.name == "nt":
 
 
 async def main():
-    token = os.getenv("SKYBOT_TOKEN")
+    token = os.getenv("SKYM8_TOKEN")
     if token is None:
         raise Exception("Please add your token to .env file.")
 
@@ -32,7 +32,7 @@ async def main():
         "sky_events",
     ]
 
-    bot = SkyBot(
+    bot = SkyM8(
         commands.when_mentioned_or("!"),
         initial_extensions=initial_extensions,
         intents=intents,

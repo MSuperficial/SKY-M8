@@ -5,7 +5,7 @@ from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.app_commands import Choice
 from discord.ext import commands
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 from ..helper import tzutils
@@ -101,7 +101,7 @@ class UserProfile(commands.Cog):
             values = [m if s is None else s for s, m in zip(values, main_values)]
         return values if len(values) > 1 else values[0]
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         self.bot = bot
 
     async def __check_guild(self, interaction: Interaction, per_server: bool):

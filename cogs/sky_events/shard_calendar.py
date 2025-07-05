@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 from ..base.live_update import LiveUpdateCog
@@ -87,7 +87,7 @@ class ShardCalendar(
 
         return config
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         super().__init__(bot)
 
     async def cog_load(self):
@@ -284,7 +284,7 @@ class ShardCalendar(
 
 
 class ShardEmbedBuilder:
-    def __init__(self, bot: SkyBot, config: _ShardCfg):
+    def __init__(self, bot: SkyM8, config: _ShardCfg):
         self.bot = bot
         self.config = config
         self.emojis = config["emojis"]
@@ -558,6 +558,6 @@ _default_translation = {
 }
 
 
-async def setup(bot: SkyBot):
+async def setup(bot: SkyM8):
     bot.add_dynamic_items(ShardNavButton)
     await bot.add_cog(ShardCalendar(bot))

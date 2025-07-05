@@ -9,7 +9,7 @@ from discord import Interaction, app_commands
 from discord.ext import commands, tasks
 from discord.utils import MISSING, get
 
-from sky_bot import SkyBot
+from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
 from ..helper.embeds import fail, success
@@ -73,7 +73,7 @@ class LiveUpdateCog(commands.Cog):
         cls.update_live_msg.before_loop(cls._task_live_before)
         cls.update_live_msg.error(cls._task_live_error)
 
-    def __init__(self, bot: SkyBot):
+    def __init__(self, bot: SkyM8):
         self.bot = bot
         self.live_webhooks: list[LiveUpdateWebhook] = []
         self.last_msg_data: dict[str, Any] = {}
@@ -90,7 +90,7 @@ class LiveUpdateCog(commands.Cog):
         old_data = await remote_config.get_list(self._WEBHOOKS_KEY)
         old_data = [json.loads(d) for d in old_data]
         new_webhooks: list[LiveUpdateWebhook] = []
-        bot_token = os.getenv("SKYBOT_TOKEN")
+        bot_token = os.getenv("SKYM8_TOKEN")
         for data in old_data:
             try:
                 lw = await LiveUpdateWebhook.from_dict(data, self.bot, bot_token)

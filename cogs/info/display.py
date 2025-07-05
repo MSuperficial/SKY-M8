@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import discord
 
-from sky_bot import AppUser
+from sky_m8 import AppUser
 
 from ..helper import formats, tzutils
 
