@@ -66,11 +66,12 @@ class TimezoneDisplay:
         self,
         users: Sequence[tuple[AppUser, ZoneInfo | None]],
         base_tz: ZoneInfo | None = None,
+        name: str = "",
     ):
         embed = discord.Embed(
             color=discord.Color.teal(),
             title="Compare local times",
-        )
+        ).set_footer(text=name)
         now = datetime.now(ZoneInfo("UTC"))
 
         def _key(u: tuple[AppUser, ZoneInfo | None]):

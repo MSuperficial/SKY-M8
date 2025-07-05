@@ -83,6 +83,16 @@ class RemoteConfig:
         values = [v[0] if len(v) > 0 else None for v in values]
         return values
 
+    async def get_json_keys(self, key: str, *path: Any):
+        p = self._join_path(*path)
+        result = await self.redis.json.objkeys(key, p)
+        # 路径不存在->[] or 值不是对象类型->[None]
+        if len(result) == 0 or result[0] is None:
+            return None
+        # 路径存在且值是对象类型：list[list[str]]
+        keys = result[0]
+        return keys
+
     async def _ensure_path_exist(self, key: str, *path: Any):
         if not await self.redis.json.type(key):
             await self.redis.json.set(key, "$", {})
@@ -103,7 +113,8 @@ class RemoteConfig:
 
     async def delete_json(self, key: str, *path: Any):
         p = self._join_path(*path)
-        await self.redis.json.delete(key, p)
+        result = await self.redis.json.delete(key, p)
+        return result == 1
 
 
 remote_config = RemoteConfig()

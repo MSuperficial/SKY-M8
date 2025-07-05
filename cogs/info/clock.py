@@ -1,23 +1,77 @@
-from typing import Any
+from contextlib import suppress
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 import discord
 from discord import Interaction, app_commands, ui
+from discord.app_commands import Choice
 from discord.ext import commands
 
 from sky_bot import AppUser, SkyBot
+from utils.remote_config import remote_config
 
-from ..base.views import AutoDisableView
-from ..helper.embeds import fail
+from ..base.views import AutoDisableView, ShortTextModal
+from ..helper.embeds import fail, success
 from .display import TimezoneDisplay
 from .profile import UserProfile
 
 
+class ClockGroup(NamedTuple):
+    name: str
+    ids: list[int]
+
+
+class ClockGroupTransformer(app_commands.Transformer):
+    async def transform(self, interaction: Interaction, value: str):
+        group = await Clock._get_group(interaction.user, value)
+        return group
+
+    async def autocomplete(self, interaction: Interaction, value: str):  # type: ignore
+        choices: list[Choice[str]] = []
+        names = await Clock._list_group(interaction.user)
+        if not names:
+            return choices
+        choices = [Choice(name=n, value=n) for n in names if value.lower() in n.lower()]
+        return choices
+
+
 class Clock(commands.Cog):
+    _GP_KEY = "clockGroup"
     group_clock = app_commands.Group(
         name="clock",
         description="View and compare user's time.",
     )
+    group_clock_group = app_commands.Group(
+        name="group",
+        description="View and manage clock groups.",
+        parent=group_clock,
+    )
+
+    @classmethod
+    async def _save_group(cls, user: AppUser, name: str, ids: list[int]):
+        guild_id = user.guild.id if isinstance(user, discord.Member) else 0
+        val = [str(i) for i in ids]
+        await remote_config.set_json(cls._GP_KEY, user.id, guild_id, name, value=val)
+
+    @classmethod
+    async def _get_group(cls, user: AppUser, name: str):
+        guild_id = user.guild.id if isinstance(user, discord.Member) else 0
+        val: list[str] | None = await remote_config.get_json(cls._GP_KEY, user.id, guild_id, name)  # type: ignore # fmt: skip
+        if not val:
+            return name
+        ids = [int(v) for v in val]
+        return ClockGroup(name, ids)
+
+    @classmethod
+    async def _list_group(cls, user: AppUser):
+        guild_id = user.guild.id if isinstance(user, discord.Member) else 0
+        names = await remote_config.get_json_keys(cls._GP_KEY, user.id, guild_id)
+        return names
+
+    @classmethod
+    async def _delete_group(cls, user: AppUser, name: str):
+        guild_id = user.guild.id if isinstance(user, discord.Member) else 0
+        return await remote_config.delete_json(cls._GP_KEY, user.id, guild_id, name)
 
     def __init__(self, bot: SkyBot):
         self.bot = bot
@@ -122,6 +176,80 @@ class Clock(commands.Cog):
         view.clock_msg = clock_msg
         view.response_msg = response_msg
 
+    @group_clock_group.command(name="view", description="View clock group.")  # fmt: skip
+    @app_commands.describe(
+        group="Name of your clock group.",
+        show_message="Show message to everyone, this will hide DIFF info and your time zone (if hidden), by default False.",
+    )
+    async def clock_group_view(
+        self,
+        interaction: Interaction,
+        group: app_commands.Transform[ClockGroup | str, ClockGroupTransformer],
+        show_message: bool = False,
+    ):
+        if not isinstance(group, ClockGroup):
+            await interaction.response.send_message(
+                embed=fail("Not exist", f"No clock group named `{group}`"),
+                ephemeral=True,
+            )
+            return
+        guild_id = interaction.guild_id or 0
+        users: list[AppUser] = []
+        invalid: list[int] = []
+        for i in group.ids:
+            u = self.bot.get_user(i)
+            if u is None:
+                with suppress(discord.NotFound):
+                    u = await self.bot.fetch_user(i)
+            if u:
+                users.append(u)
+            else:
+                invalid.append(i)
+        show = show_message and len(invalid) == 0
+        await interaction.response.send_message(
+            "The bot is thinking...",
+            ephemeral=not show,
+        )
+        embeds = []
+        if len(users) > 0:
+            view = ClockCompareView(
+                guild_id,
+                users,
+                interaction.user,
+                show_message,
+                group.name,
+            )
+            view.stop()
+            msg_data = await view.create_message()
+            embeds.append(msg_data["embed"])
+        if len(invalid) > 0:
+            invalid_embed = fail(
+                "Invalid users",
+                "\n".join([f"- `{i}`" for i in invalid]),
+            )
+            embeds.append(invalid_embed)
+        await interaction.edit_original_response(content=None, embeds=embeds)
+
+    @group_clock_group.command(name="delete", description="Delete a clock group.")
+    @app_commands.describe()
+    async def clock_group_delete(
+        self,
+        interaction: Interaction,
+        group: app_commands.Transform[ClockGroup | str, ClockGroupTransformer],
+    ):
+        if not isinstance(group, ClockGroup):
+            await interaction.response.send_message(
+                embed=fail("Not exist", f"No clock group named `{group}`"),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await self._delete_group(interaction.user, group.name)
+            await interaction.followup.send(embed=success("Clock group deleted"))
+        except Exception as ex:
+            await interaction.followup.send(embed=fail("Error while deleting", ex))
+
 
 class ClockCompareView(AutoDisableView):
     def __init__(
@@ -130,12 +258,14 @@ class ClockCompareView(AutoDisableView):
         users: list[AppUser],
         base: AppUser,
         show: bool,
+        name: str = "",
     ):
         super().__init__(timeout=300)
         self.guild_id = guild_id
         self.users = users
         self.base = base
         self.show = show
+        self.name = name
         self.select_users.default_values = users
         self.clock_msg: discord.Message
 
@@ -159,7 +289,7 @@ class ClockCompareView(AutoDisableView):
             )
             infos.append((u, ZoneInfo(tz) if not hidden and tz else None))
         display = TimezoneDisplay()
-        embed = display.compare_embed(infos, None if self.show else base_tz)
+        embed = display.compare_embed(infos, None if self.show else base_tz, self.name)
         return {"embed": embed}
 
     @ui.select(
@@ -181,3 +311,22 @@ class ClockCompareView(AutoDisableView):
         self.users = users
         msg_data = await self.create_message()
         await self.clock_msg.edit(**msg_data)
+
+    @ui.button(label="Save as group...")
+    async def save_group(self, interaction: Interaction, button):
+        modal = ShortTextModal(title="Clock Group", label="Group Name")
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        name = modal.text.value
+        ids = [u.id for u in self.users]
+        try:
+            await Clock._save_group(interaction.user, name, ids)
+            await interaction.followup.send(
+                embed=success("Clock group saved"),
+                ephemeral=True,
+            )
+        except Exception as ex:
+            await interaction.followup.send(
+                embed=fail("Error while saving", ex),
+                ephemeral=True,
+            )
