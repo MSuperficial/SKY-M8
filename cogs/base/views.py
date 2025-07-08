@@ -115,7 +115,7 @@ class DateModal(ui.Modal, title="Set Date"):
 class TimeModal(ui.Modal, title="Set Time"):
     text_hour = ui.TextInput(label="Hour (0~23 or 1~12AM/PM)", min_length=1, max_length=4)  # fmt: skip
     text_minute = ui.TextInput(label="Minute (0~59)", min_length=1, max_length=2)
-    text_second = ui.TextInput(label="Second (0~59)", min_length=1, max_length=2)
+    text_second = ui.TextInput(label="Second (0~59)", required=False, max_length=2)
 
     def __init__(self, *, dt: datetime) -> None:
         self.time = dt.time()
@@ -149,7 +149,7 @@ class TimeModal(ui.Modal, title="Set Time"):
             self.time = time(
                 self.parse_hour(self.text_hour.value),
                 int(self.text_minute.value),
-                int(self.text_second.value),
+                int(self.text_second.value or "0"),
             )
             self.valid = True
         except ValueError:

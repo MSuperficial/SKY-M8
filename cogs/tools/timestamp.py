@@ -96,7 +96,7 @@ class TimestampMaker(commands.Cog):
                     )
                 )
                 return
-        now = datetime.now(tzinfo)
+        now = datetime.now(tzinfo).replace(second=0, microsecond=0)
         view = TimestampView(datetime=now)
         msg_data = view.create_message()
         msg = await interaction.followup.send(
@@ -121,8 +121,8 @@ class TimestampView(AutoDisableView):
         )
         tips = (
             "### How to copy\n"
-            "- PC: Triple click the timestamp and press `Ctrl/Cmd+C`\n"
-            "- Mobile: Simply tap on the timestamp"
+            "- PC: Triple click the `<t:...>` and press `Ctrl/Cmd+C`\n"
+            "- Mobile: Simply tap on the `<t:...>`"
         )
         styles = get_args(TimestampStyle)
         timestamps = [format_dt(self.dt, s) for s in styles]
