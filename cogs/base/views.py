@@ -1,8 +1,9 @@
 from datetime import date, datetime, time
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import discord
-from discord import Interaction, Message, TextStyle, ui
+from discord import ButtonStyle, Interaction, Message, TextStyle, ui
 
 from ..helper.embeds import fail
 from ..helper.tzutils import TimezoneFinder, format_hint
@@ -183,3 +184,66 @@ class TimeZoneModal(ui.Modal, title="Set Time Zone"):
                 embed=fail("Invalid time zone"),
                 ephemeral=True,
             )
+
+
+class ConfirmView(ui.View):
+    def __init__(
+        self,
+        text: str = "",
+        *,
+        timeout: float | None = 30,
+        delete_after: bool = True,
+    ):
+        super().__init__(timeout=timeout)
+        self.text = text
+        self.delete_after = delete_after
+        self.result: bool | None = None
+        self.message: discord.Message
+
+    @ui.button(label="Yes", style=ButtonStyle.green)
+    async def yes(self, interaction: Interaction, button):
+        self.result = True
+        await interaction.response.defer()
+        self.stop()
+
+    @ui.button(label="No", style=ButtonStyle.red)
+    async def no(self, interaction: Interaction, button):
+        self.result = False
+        await interaction.response.defer()
+        self.stop()
+
+    async def create_message(self) -> dict[str, Any]:
+        embed = discord.Embed(
+            title="Confirmation",
+            description=self.text,
+        )
+        return {"embed": embed}
+
+    async def show(self, interaction: Interaction, **msg_data: Any):
+        # 准备消息数据
+        if not msg_data:
+            msg_data = await self.create_message()
+        if "view" in msg_data:
+            del msg_data["view"]
+        # 发送消息
+        if interaction.response.is_done():
+            self.message = await interaction.followup.send(**msg_data, view=self, ephemeral=True)  # fmt: skip
+        else:
+            res = await interaction.response.send_message(**msg_data, view=self, ephemeral=True)  # fmt: skip
+            self.message = res.resource  # type: ignore
+        # 等待回应并返回结果
+        await self.wait()
+        # 删除消息或禁用按钮
+        if self.delete_after:
+            await self.message.delete()
+        else:
+            self.yes.disabled = self.no.disabled = True
+            await self.message.edit(view=self)
+        return self.result
+
+    async def edit(self, **msg_data: Any):
+        if not self.message:
+            return
+        if "view" not in msg_data:
+            msg_data["view"] = None
+        await self.message.edit(**msg_data)

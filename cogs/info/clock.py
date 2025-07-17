@@ -10,7 +10,7 @@ from discord.ext import commands
 from sky_m8 import AppUser, SkyM8
 from utils.remote_config import remote_config
 
-from ..base.views import AutoDisableView, ShortTextModal
+from ..base.views import AutoDisableView, ConfirmView, ShortTextModal
 from ..helper.embeds import fail, success
 from .display import TimezoneDisplay
 from .profile import UserProfile
@@ -19,6 +19,20 @@ from .profile import UserProfile
 class ClockGroup(NamedTuple):
     name: str
     ids: list[int]
+
+    async def parse_users(self, bot: SkyM8):
+        users: list[AppUser] = []
+        invalid: list[int] = []
+        for i in self.ids:
+            u = bot.get_user(i)
+            if u is None:
+                with suppress(discord.NotFound):
+                    u = await bot.fetch_user(i)
+            if u:
+                users.append(u)
+            else:
+                invalid.append(i)
+        return users, invalid
 
 
 class ClockGroupTransformer(app_commands.Transformer):
@@ -189,22 +203,12 @@ class Clock(commands.Cog):
     ):
         if not isinstance(group, ClockGroup):
             await interaction.response.send_message(
-                embed=fail("Not exist", f"No clock group named `{group}`"),
+                embed=fail("Not exist", f"No clock group named {group}"),
                 ephemeral=True,
             )
             return
         guild_id = interaction.guild_id or 0
-        users: list[AppUser] = []
-        invalid: list[int] = []
-        for i in group.ids:
-            u = self.bot.get_user(i)
-            if u is None:
-                with suppress(discord.NotFound):
-                    u = await self.bot.fetch_user(i)
-            if u:
-                users.append(u)
-            else:
-                invalid.append(i)
+        users, invalid = await group.parse_users(self.bot)
         show = show_message and len(invalid) == 0
         await interaction.response.send_message(
             "The bot is thinking...",
@@ -231,7 +235,9 @@ class Clock(commands.Cog):
         await interaction.edit_original_response(content=None, embeds=embeds)
 
     @group_clock_group.command(name="delete", description="Delete a clock group.")
-    @app_commands.describe()
+    @app_commands.describe(
+        group="Name of your clock group.",
+    )
     async def clock_group_delete(
         self,
         interaction: Interaction,
@@ -239,16 +245,29 @@ class Clock(commands.Cog):
     ):
         if not isinstance(group, ClockGroup):
             await interaction.response.send_message(
-                embed=fail("Not exist", f"No clock group named `{group}`"),
+                embed=fail("Not exist", f"No clock group named {group}"),
                 ephemeral=True,
             )
             return
         await interaction.response.defer(ephemeral=True)
-        try:
-            await self._delete_group(interaction.user, group.name)
-            await interaction.followup.send(embed=success("Clock group deleted"))
-        except Exception as ex:
-            await interaction.followup.send(embed=fail("Error while deleting", ex))
+        # 向用户显示确认信息
+        users, invalid = await group.parse_users(self.bot)
+        mentions = [u.mention for u in users] + [f"<@{i}>" for i in invalid]
+        desc = "\n".join([f"- {m}" for m in mentions])
+        desc = group.name + "\n" + desc
+        embed = discord.Embed(
+            title="Are you sure you want to delete this group",
+            description=desc,
+        )
+        confirm = ConfirmView(delete_after=False)
+        result = await confirm.show(interaction, embed=embed)
+        # 执行删除
+        if result:
+            try:
+                await self._delete_group(interaction.user, group.name)
+                await confirm.edit(embed=success("Clock group deleted"))
+            except Exception as ex:
+                await confirm.edit(embed=fail("Error while deleting", ex))
 
 
 class ClockCompareView(AutoDisableView):
