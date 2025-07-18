@@ -88,22 +88,34 @@ class LiveUpdateCog(commands.Cog):
         self.update_live_msg.cancel()
 
     async def refresh_live_webhooks(self):
-        old_data = await remote_config.get_list(self._WEBHOOKS_KEY)
-        old_data = [json.loads(d) for d in old_data]
+        value = await remote_config.get_list(self._WEBHOOKS_KEY)
+        old_data = [json.loads(v) for v in value]
+        # 读取上次异常的数据
+        failed_value = await remote_config.get_list(self._WEBHOOKS_KEY + ".failed")
+        failed_data = [json.loads(v) for v in failed_value]
+        old_data.extend(failed_data)
+
+        failed_data.clear()
         new_webhooks: list[LiveUpdateWebhook] = []
         bot_token = os.getenv("SKYM8_TOKEN")
         for data in old_data:
             try:
                 lw = await LiveUpdateWebhook.from_dict(data, self.bot, bot_token)
-                # 如果live消息已经被删除，则也删除webhook并跳过
+                # 如果live消息已不存在，则也删除webhook并跳过
                 if not lw.message:
                     await lw.webhook.delete(reason="Live message not found.")
                     continue
                 new_webhooks.append(lw)
+            except (discord.NotFound, discord.Forbidden):
+                # webhook已不存在，或缺少权限
+                pass
             except Exception:
-                continue
+                # 如果发生其他异常，不确定情况，不能直接丢弃数据
+                failed_data.append(data)
         new_data = [w.to_dict() for w in new_webhooks]
         await remote_config.set_list(self._WEBHOOKS_KEY, new_data)
+        # 记录异常数据，下次可以重新读取
+        await remote_config.set_list(self._WEBHOOKS_KEY + ".failed", failed_data)
         return new_webhooks
 
     @commands.Cog.listener()
@@ -330,7 +342,9 @@ class LiveUpdateWebhook(NamedTuple):
         webhook.proxy = os.getenv("PROXY")
         try:
             message = await webhook.fetch_message(int(data["messageId"]))
-        except discord.NotFound:
+        except discord.NotFound as ex:
+            if ex.code == 10015:  # webhook已不存在
+                raise
             message = MISSING
         return cls(webhook=webhook, message=message)
 
