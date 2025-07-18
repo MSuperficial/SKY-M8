@@ -78,12 +78,13 @@ class ShardCalendar(
         trans = _default_translation | config.get("translations", {})
         config["translations"] = trans
 
-        emoji_mapping: dict[str, str] = config["emojis"]  # type: ignore
+        emoji_mapping: dict[str, str] = config.get("emojis", {})  # type: ignore
         emoji_override = {k: Emojis(v, v) for k, v in emoji_mapping.items()}
         emojis = Emojis.emojis | emoji_override
         config["emojis"] = emojis
 
         config.setdefault("coming_days", 7)
+        config.setdefault("infographics", {})
 
         return config
 
