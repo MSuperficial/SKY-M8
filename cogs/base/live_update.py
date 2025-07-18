@@ -120,21 +120,41 @@ class LiveUpdateCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        # 如果live消息被删除，则同时删除webhook
+        if (lw := get(self.live_webhooks, message__id=payload.message_id)) is None:
+            return
         async with self._live_lock:
-            if lw := get(self.live_webhooks, message__id=payload.message_id):
-                # 如果live消息被删除，则同时删除webhook
-                try:
-                    self.live_webhooks.remove(lw)
-                    data = [w.to_dict() for w in self.live_webhooks]
-                    await remote_config.set_list(self._WEBHOOKS_KEY, data)
-                    with suppress(discord.NotFound):
-                        await lw.webhook.delete(reason="Live message was deleted.")
-                    print(
-                        f"[{sky_time_now()}] {self._DISPLAY_NAME} live message removed.\n"
-                        f"{lw.message.jump_url}."
-                    )
-                except Exception as ex:
-                    print(f"[{sky_time_now()}] Error deleting live webhook: {ex}")
+            try:
+                self.live_webhooks.remove(lw)
+                data = [w.to_dict() for w in self.live_webhooks]
+                await remote_config.set_list(self._WEBHOOKS_KEY, data)
+                await lw.webhook.delete(reason="Live message was deleted.")
+                print(
+                    f"[{sky_time_now()}] {self._DISPLAY_NAME} live message removed.\n"
+                    f"{lw.message.jump_url}."
+                )
+            except Exception as ex:
+                print(f"[{sky_time_now()}] Error deleting live webhook: {ex}")
+
+    @commands.Cog.listener()
+    async def on_audit_log_entry_create(self, entry: discord.AuditLogEntry):
+        # 如果live webhook被删除，则同时删除对应消息
+        if entry.action != discord.AuditLogAction.webhook_delete:
+            return
+        if (lw := get(self.live_webhooks, webhook__id=entry.target.id)) is None:  # type: ignore
+            return
+        async with self._live_lock:
+            try:
+                self.live_webhooks.remove(lw)
+                data = [w.to_dict() for w in self.live_webhooks]
+                await remote_config.set_list(self._WEBHOOKS_KEY, data)
+                await lw.message.channel.get_partial_message(lw.message.id).delete()  # type: ignore
+                print(
+                    f"[{sky_time_now()}] {self._DISPLAY_NAME} live message removed.\n"
+                    f"{lw.message.jump_url}."
+                )
+            except Exception as ex:
+                print(f"[{sky_time_now()}] Error deleting live webhook: {ex}")
 
     async def _live_setup_impl(
         self,
