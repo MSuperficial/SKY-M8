@@ -27,8 +27,7 @@ async def main():
         "emoji_manager",
         "info",
         "tools",
-        "welcome",
-        "role_manager",
+        "admin",
         "sky_events",
     ]
 

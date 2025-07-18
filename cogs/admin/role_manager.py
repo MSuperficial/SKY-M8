@@ -12,9 +12,9 @@ from discord import (
 from discord.ext import commands
 from discord.utils import MISSING, find
 
-from .base.views import AutoDisableView, LongTextModal, ShortTextModal
-from .helper.converters import MessageTransformer
-from .helper.embeds import fail, success
+from ..base.views import AutoDisableView, LongTextModal, ShortTextModal
+from ..helper.converters import MessageTransformer
+from ..helper.embeds import fail, success
 
 __all__ = ("RoleManager",)
 
@@ -25,6 +25,7 @@ class RoleManager(commands.Cog):
         description="Commands for Autoroles setup and editting.",
         allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
         allowed_installs=app_commands.AppInstallationType(user=False),
+        default_permissions=discord.Permissions(manage_roles=True),
     )
 
     def __init__(self, bot):

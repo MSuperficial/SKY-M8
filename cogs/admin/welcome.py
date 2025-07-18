@@ -9,9 +9,9 @@ from discord.ext import commands, tasks
 from sky_m8 import SkyM8
 from utils.remote_config import remote_config
 
-from .base.views import AutoDisableView, LongTextModal, ShortTextModal
-from .helper.embeds import fail, success
-from .helper.var_parser import VarParser
+from ..base.views import AutoDisableView, LongTextModal, ShortTextModal
+from ..helper.embeds import fail, success
+from ..helper.var_parser import VarParser
 
 __all__ = ("Welcome",)
 
@@ -42,6 +42,7 @@ class Welcome(commands.Cog):
         description="Commands to setup welcome for new members.",
         allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
         allowed_installs=app_commands.AppInstallationType(user=False),
+        default_permissions=discord.Permissions(manage_guild=True),
     )
 
     def __init__(self, bot: SkyM8):

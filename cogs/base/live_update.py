@@ -61,6 +61,7 @@ class LiveUpdateCog(commands.Cog):
             description=f"Commands to manage {live_display_name} live message.",
             allowed_contexts=app_commands.AppCommandContext(dm_channel=False),
             allowed_installs=app_commands.AppInstallationType(user=False),
+            default_permissions=discord.Permissions(manage_webhooks=True),
         )
         cls.group_live.add_command(cls.live_setup)
         cls.group_live.add_command(cls.live_removve)
