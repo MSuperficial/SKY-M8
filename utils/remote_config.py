@@ -54,7 +54,15 @@ class RemoteConfig:
         await self.set_dict(key, value)
 
     def _join_path(self, *path: Any):
-        return ".".join(["$"] + [str(p) for p in path])
+        def elem(p: Any):
+            s = str(p)
+            if " " in s:
+                s = f"['{s}']"  # Bracket notation
+            else:
+                s = "." + s  # Dot notation
+            return s
+
+        return "".join(["$"] + [elem(p) for p in path])
 
     async def exists_json(self, key: str, *path: Any):
         p = self._join_path(*path)
