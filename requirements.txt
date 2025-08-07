@@ -7,8 +7,10 @@ idna==3.4
 multidict==6.0.4
 typing_extensions==4.7.1
 yarl==1.9.2
+pillow==11.3.0
 python-dotenv==1.0.1
 pytz
 thefuzz==0.22.1
 tzdata
 upstash-redis
+webptools==0.0.9
