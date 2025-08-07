@@ -4,11 +4,13 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from webptools import grant_permission
 
 load_dotenv(override=True)
 
 from sky_m8 import MentionableTree, SkyM8
 
+grant_permission()
 if os.name == "nt":
     policy = asyncio.WindowsSelectorEventLoopPolicy()
     asyncio.set_event_loop_policy(policy)
