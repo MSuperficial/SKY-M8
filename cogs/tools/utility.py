@@ -34,7 +34,11 @@ class Utility(commands.Cog):
         name="mimic-stickers",
         description="Create a sticker-like image that can be added to fav GIFs.",
     )
-    @app_commands.describe()
+    @app_commands.describe(
+        file="Use image by uploading image file.",
+        url="Use image by reading from url.",
+        size="The size of created image in pixels, by default 320.",
+    )
     async def mimic_stickers(
         self,
         interaction: Interaction,
@@ -98,7 +102,8 @@ class Utility(commands.Cog):
             frames.append(f)
 
         if len(frames) == 1:
-            # 如果是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
+            # 如果原图是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
+            # 因为在使用PIL保存WebP图片时，编码算法会将连续重复帧进行优化，导致无法生成多帧图片
             frames[0].save("_temp_frame.webp", quality=90, method=4)
             webpmux_animate(
                 [f"_temp_frame.webp +{duration}+0+0+1+b"] * 2,
@@ -114,7 +119,7 @@ class Utility(commands.Cog):
             except Exception:
                 pass
         else:
-            # 如果是多帧图像，可以直接保存到缓冲区
+            # 如果原图是多帧图像，可以直接保存到缓冲区
             buffer = io.BytesIO()
             frames[0].save(
                 buffer,
@@ -156,9 +161,10 @@ class MimicStickerView(ui.View):
 
     @ui.button(label="Send Image", style=ButtonStyle.success)
     async def send(self, interaction: Interaction, button):
+        await interaction.response.defer()
         self.buffer.seek(0)
         file = discord.File(self.buffer, self.filename)
-        await interaction.response.send_message(
+        await interaction.channel.send(  # type: ignore
             content=f"**Mimic sticker created by {self.author.mention}**",
             file=file,
         )
