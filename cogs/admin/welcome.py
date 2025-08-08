@@ -58,10 +58,14 @@ class Welcome(commands.Cog):
         db_id = int(os.getenv("DATABASE_CHANNEL", "0"))
         self._db_channel: discord.TextChannel | None = self.bot.get_channel(db_id)  # type: ignore
 
+    def _is_mime_valid(self, mime: str):
+        return mime in ["image/" + t for t in self._img_types]
+
     def _is_img_file_valid(self, file: discord.Attachment):
         mime = file.content_type
         suffix = Path(file.filename).suffix[1:]
-        return mime and mime[6:] in self._img_types and suffix in self._img_types
+        suffix_valid = suffix in self._img_types
+        return mime is not None and self._is_mime_valid(mime) and suffix_valid
 
     async def fetch_welcome_msg(self, guild_id: int):
         msg: _MsgCfg = await remote_config.get_json(self._WELCOME_KEY, guild_id, "message")  # type: ignore # fmt: skip

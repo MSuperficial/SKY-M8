@@ -2,8 +2,8 @@ import io
 import os
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 
+import aiohttp
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
@@ -25,10 +25,14 @@ class Utility(commands.Cog):
         self.bot = bot
         self._img_types = ["jpg", "jpeg", "png", "webp", "gif", "tiff", "tif", "avif", "avifs"]  # fmt: skip
 
+    def _is_mime_valid(self, mime: str):
+        return mime in ["image/" + t for t in self._img_types]
+
     def _is_img_file_valid(self, file: discord.Attachment):
         mime = file.content_type
         suffix = Path(file.filename).suffix[1:]
-        return mime and mime[6:] in self._img_types and suffix in self._img_types
+        suffix_valid = suffix in self._img_types
+        return mime is not None and self._is_mime_valid(mime) and suffix_valid
 
     @group_utility.command(
         name="mimic-stickers",
@@ -69,13 +73,34 @@ class Utility(commands.Cog):
                 buffer = io.BytesIO()
                 await file.save(buffer)
                 im = Image.open(buffer)
+                im.filename = file.filename
             except Exception as ex:
                 await interaction.followup.send(embed=fail("Invalid file", ex))
                 return
         else:
             # 从url读取图片到PIL Image对象
             try:
-                im = Image.open(urlopen(url))  # type: ignore
+                proxy = os.getenv("PROXY")
+                async with aiohttp.ClientSession() as cs:
+                    async with cs.get(url, proxy=proxy) as res:  # type: ignore
+                        if res.status != 200:
+                            await interaction.followup.send(
+                                embed=fail(f"Request failed: {res.status}")
+                            )
+                            return
+                        # 检查图片文件格式
+                        if not self._is_mime_valid(res.content_type):
+                            valid_types = ", ".join([f"`{t}`" for t in self._img_types])
+                            await interaction.followup.send(
+                                embed=fail(
+                                    "Format not supported",
+                                    "Only support " + valid_types,
+                                ),
+                            )
+                            return
+                        buffer = io.BytesIO(await res.read())
+                        im = Image.open(buffer)
+                        im.filename = res.url.name
             except Exception as ex:
                 await interaction.followup.send(embed=fail("Invalid url", ex))
                 return
@@ -90,7 +115,7 @@ class Utility(commands.Cog):
         # 获取图片信息
         duration = im.info.get("duration", 500)
         loop = im.info.get("loop", 0)
-        filename = file.filename if file else str(im.filename) or "mimic.webp"
+        filename = im.filename or "mimic.webp"
         filename = Path(filename).stem + "_sticker.webp"
 
         # 每一帧转换格式
