@@ -8,6 +8,7 @@ import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
 from PIL import Image, ImageOps, ImageSequence
+from PIL.Image import Image as PImage
 from webptools import webpmux_animate
 
 from sky_m8 import SkyM8
@@ -112,49 +113,11 @@ class Utility(commands.Cog):
             ),
         )
 
-        # 获取图片信息
-        duration = im.info.get("duration", 500)
-        loop = im.info.get("loop", 0)
         filename = im.filename or "mimic.webp"
         filename = Path(filename).stem + "_sticker.webp"
 
-        # 每一帧转换格式
-        frames: list[Image.Image] = []
-        for f in ImageSequence.Iterator(im):
-            f = f.convert("RGBA")
-            f = ImageOps.pad(f, (size, size))
-            f = ImageOps.pad(f, (size * 2, size), centering=(0, 0))
-            frames.append(f)
-
-        if len(frames) == 1:
-            # 如果原图是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
-            # 因为在使用PIL保存WebP图片时，编码算法会将连续重复帧进行优化，导致无法生成多帧图片
-            frames[0].save("_temp_frame.webp", quality=90, method=4)
-            webpmux_animate(
-                [f"_temp_frame.webp +{duration}+0+0+1+b"] * 2,
-                "_temp_sticker.webp",
-                loop,
-                "0,0,0,0",
-            )
-            with open("_temp_sticker.webp", "rb") as f:
-                buffer = io.BytesIO(f.read())
-            try:
-                os.remove("_temp_frame.webp")
-                os.remove("_temp_sticker.webp")
-            except Exception:
-                pass
-        else:
-            # 如果原图是多帧图像，可以直接保存到缓冲区
-            buffer = io.BytesIO()
-            frames[0].save(
-                buffer,
-                format="WEBP",
-                append_images=frames[1:],
-                duration=duration,
-                loop=loop,
-                quality=90,
-                method=4,
-            )
+        maker = MimicStickerMaker(size=size)
+        buffer = maker.make_sticker(im)
 
         # 关闭图像
         im.close()
@@ -162,6 +125,64 @@ class Utility(commands.Cog):
         view = MimicStickerView(buffer, filename, interaction.user)
         msg_data = view.create_message()
         await interaction.edit_original_response(**msg_data, embed=None, view=view)
+
+
+class MimicStickerMaker:
+    def __init__(self, *, size: int = 320):
+        self.size = size
+
+    def _make_singleframe(self, frame: PImage, duration: int, loop: int):
+        # 如果输入是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
+        # 因为在使用PIL保存WebP图片时，编码算法会将连续重复帧进行优化，导致无法生成多帧图片
+        frame.save("_temp_frame.webp", quality=90, method=4)
+        webpmux_animate(
+            [f"_temp_frame.webp +{duration}+0+0+1+b"] * 2,
+            "_temp_sticker.webp",
+            str(loop),
+            "0,0,0,0",
+        )
+        with open("_temp_sticker.webp", "rb") as f:
+            buffer = io.BytesIO(f.read())
+        try:
+            os.remove("_temp_frame.webp")
+            os.remove("_temp_sticker.webp")
+        except Exception:
+            pass
+        return buffer
+
+    def _make_multiframe(self, frames: list[PImage], duration: int, loop: int):
+        # 如果输入是多帧图像，可以直接保存到缓冲区
+        buffer = io.BytesIO()
+        frames[0].save(
+            buffer,
+            format="WEBP",
+            append_images=frames[1:],
+            duration=duration,
+            loop=loop,
+            quality=90,
+            method=4,
+        )
+        return buffer
+
+    def make_sticker(self, im: PImage):
+        # 获取图片信息
+        duration = im.info.get("duration", 500)
+        loop = im.info.get("loop", 0)
+
+        # 每一帧转换格式
+        frames: list[PImage] = []
+        for f in ImageSequence.Iterator(im):
+            f = f.convert("RGBA")
+            f = ImageOps.pad(f, (self.size, self.size))
+            f = ImageOps.pad(f, (self.size * 2, self.size), centering=(0, 0))
+            frames.append(f)
+
+        if len(frames) == 1:
+            buffer = self._make_singleframe(frames[0], duration, loop)
+        else:
+            buffer = self._make_multiframe(frames, duration, loop)
+
+        return buffer
 
 
 class MimicStickerView(ui.View):
