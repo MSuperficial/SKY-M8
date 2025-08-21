@@ -7,7 +7,7 @@ import aiohttp
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
-from PIL import Image, ImageOps, ImageSequence
+from PIL import Image, ImageChops, ImageOps, ImageSequence
 from PIL.Image import Image as PImage
 from webptools import webpmux_animate
 
@@ -164,6 +164,14 @@ class MimicStickerMaker:
         )
         return buffer
 
+    def _frames_identical(self, frames: list[PImage]):
+        f0 = frames[0]
+        for f in frames[1:]:
+            diff = ImageChops.difference(f0, f)
+            if diff.getbbox(alpha_only=False):
+                return False
+        return True
+
     def make_sticker(self, im: PImage):
         # 获取图片信息
         duration = im.info.get("duration", 500)
@@ -177,7 +185,8 @@ class MimicStickerMaker:
             f = ImageOps.pad(f, (self.size * 2, self.size), centering=(0, 0))
             frames.append(f)
 
-        if len(frames) == 1:
+        # 如果所有帧都相同，则取第一帧并以单帧的方法做处理
+        if len(frames) == 1 or self._frames_identical(frames):
             buffer = self._make_singleframe(frames[0], duration, loop)
         else:
             buffer = self._make_multiframe(frames, duration, loop)
