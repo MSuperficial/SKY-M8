@@ -1,5 +1,6 @@
 import io
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ from sky_m8 import AppUser, SkyM8
 from ..helper.embeds import fail
 
 __all__ = ("Utility",)
+
+_sticker_name_pattern = re.compile(r"^[a-zA-Z0-9_\-\. ]+$")
 
 
 class Utility(commands.Cog):
@@ -44,6 +47,7 @@ class Utility(commands.Cog):
     @app_commands.describe(
         file="Use image by uploading image file.",
         url="Use image by reading from url.",
+        sticker_name="The displayed name of your sticker.",
         size="The size of made image in pixels, by default 320.",
     )
     async def mimic_stickers(
@@ -51,6 +55,7 @@ class Utility(commands.Cog):
         interaction: Interaction,
         file: discord.Attachment | None = None,
         url: str | None = None,
+        sticker_name: app_commands.Range[str, 0, 80] = "",
         size: app_commands.Range[int, 128, 1024] = 320,
     ):
         await interaction.response.defer(ephemeral=True)
@@ -60,6 +65,23 @@ class Utility(commands.Cog):
                 embed=fail(
                     "Both options are empty",
                     "You need to use either `file` or `url` option",
+                )
+            )
+            return
+        # 检查名称是否合法
+        sticker_name = sticker_name.strip()
+        if sticker_name and not re.match(_sticker_name_pattern, sticker_name):
+            await interaction.followup.send(
+                embed=fail(
+                    "Invalid sticker name",
+                    (
+                        "Sticker name can only contain:\n"
+                        "- alphanumeric characters\n"
+                        "- underscores(`_`)\n"
+                        "- dashes(`-`)\n"
+                        "- dots(`.`)\n"
+                        "- spaces(` `)"
+                    ),
                 )
             )
             return
@@ -117,8 +139,9 @@ class Utility(commands.Cog):
         )
         await interaction.followup.send(view=pending_view)
 
-        filename = im.filename or "mimic.webp"
-        filename = Path(filename).stem + "_sticker.webp"
+        im.filename = im.filename or "mimic.webp"
+        if not sticker_name:
+            sticker_name = Path(im.filename).stem
 
         maker = MimicStickerMaker(size=size)
         buffer = maker.make_sticker(im)
@@ -126,7 +149,7 @@ class Utility(commands.Cog):
         # 关闭图像
         im.close()
         # 发送转换得到的WebP动画图片
-        view = MimicStickerMakerView(buffer, filename, interaction.user)
+        view = MimicStickerMakerView(buffer, sticker_name, interaction.user)
         msg_data = view.create_message()
         await interaction.edit_original_response(**msg_data)
 
@@ -212,15 +235,14 @@ class MimicStickerMakerView(ui.LayoutView):
     def __init__(
         self,
         buffer: io.BufferedIOBase,
-        filename: str,
+        sticker_name: str,
         author: AppUser,
     ):
         super().__init__(timeout=None)
         self.buffer = buffer
-        self.filename = filename
+        self.sticker_name = sticker_name
         self.author = author
 
-        file_uri = f"attachment://{filename}"
         self.add_item(
             ui.Container(
                 ui.TextDisplay("## Mimic Sticker Maker"),
@@ -229,14 +251,19 @@ class MimicStickerMakerView(ui.LayoutView):
                     accessory=ui.Thumbnail(author.display_avatar.url),
                 ),
                 ui.Separator(),
-                ui.TextDisplay(
-                    f"### Sticker Name\n> {self.filename[: -len('_sticker.webp')]}"
-                ),
+                ui.TextDisplay(f"### Sticker Name\n> {self.sticker_name}"),
                 ui.Separator(spacing=discord.SeparatorSpacing.large),
-                ui.MediaGallery(discord.MediaGalleryItem(file_uri)),
+                ui.MediaGallery(
+                    discord.MediaGalleryItem("attachment://" + self.filename),
+                ),
                 ui.ActionRow(self.SendButton()),
             )
         )
+
+    @property
+    def filename(self):
+        name = self.sticker_name.replace(" ", "_")
+        return name + "_sticker.webp"
 
     def _get_file(self):
         self.buffer.seek(0)
@@ -255,15 +282,22 @@ class MimicStickerMakerView(ui.LayoutView):
             color = self.author.top_role.color
         else:
             color = None
-        name = self.filename[: -len("_sticker.webp")]
 
         embed = discord.Embed(
             color=color,
             title="Mimic Sticker",
         )
         embed.set_thumbnail(url=self.author.display_avatar.url)
-        embed.add_field(name="Made By", value=f"> {self.author.mention}", inline=False)  # fmt: skip
-        embed.add_field(name="Sticker Name", value=f"> {name}", inline=False)
+        embed.add_field(
+            name="Made By",
+            value=f"> {self.author.mention}",
+            inline=False,
+        )
+        embed.add_field(
+            name="Sticker Name",
+            value=f"> {self.sticker_name}",
+            inline=False,
+        )
 
         file = self._get_file()
         embed.set_image(url=file.uri)
