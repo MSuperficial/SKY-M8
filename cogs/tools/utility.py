@@ -5,15 +5,17 @@ from typing import Any
 
 import aiohttp
 import discord
-from discord import ButtonStyle, Interaction, app_commands, ui
+from discord import Interaction, app_commands, ui
 from discord.ext import commands
 from PIL import Image, ImageChops, ImageOps, ImageSequence
 from PIL.Image import Image as PImage
 from webptools import webpmux_animate
 
-from sky_m8 import SkyM8
+from sky_m8 import AppUser, SkyM8
 
 from ..helper.embeds import fail
+
+__all__ = ("Utility",)
 
 
 class Utility(commands.Cog):
@@ -37,12 +39,12 @@ class Utility(commands.Cog):
 
     @group_utility.command(
         name="mimic-stickers",
-        description="Create a sticker-like image that can be added to fav GIFs.",
+        description="Make a sticker-like image that can be added to fav GIFs.",
     )
     @app_commands.describe(
         file="Use image by uploading image file.",
         url="Use image by reading from url.",
-        size="The size of created image in pixels, by default 320.",
+        size="The size of made image in pixels, by default 320.",
     )
     async def mimic_stickers(
         self,
@@ -106,12 +108,14 @@ class Utility(commands.Cog):
                 await interaction.followup.send(embed=fail("Invalid url", ex))
                 return
 
-        await interaction.followup.send(
-            embed=discord.Embed(
-                title="⏳ Converting image...",
-                description="This may take a while.",
-            ),
+        pending_view = ui.LayoutView(timeout=None)
+        pending_view.add_item(
+            ui.Container(
+                ui.TextDisplay("### ⏳ Converting image..."),
+                ui.TextDisplay("This may take a while"),
+            )
         )
+        await interaction.followup.send(view=pending_view)
 
         filename = im.filename or "mimic.webp"
         filename = Path(filename).stem + "_sticker.webp"
@@ -122,9 +126,9 @@ class Utility(commands.Cog):
         # 关闭图像
         im.close()
         # 发送转换得到的WebP动画图片
-        view = MimicStickerView(buffer, filename, interaction.user)
+        view = MimicStickerMakerView(buffer, filename, interaction.user)
         msg_data = view.create_message()
-        await interaction.edit_original_response(**msg_data, embed=None, view=view)
+        await interaction.edit_original_response(**msg_data)
 
 
 class MimicStickerMaker:
@@ -194,32 +198,77 @@ class MimicStickerMaker:
         return buffer
 
 
-class MimicStickerView(ui.View):
+class MimicStickerMakerView(ui.LayoutView):
+    class SendButton(ui.Button["MimicStickerMakerView"]):
+        def __init__(self):
+            super().__init__(style=discord.ButtonStyle.green, label="Send It!")
+
+        async def callback(self, interaction: Interaction):
+            assert self.view is not None
+            await interaction.response.defer()
+            msg_data = self.view.create_display_message()
+            await interaction.channel.send(**msg_data)  # type: ignore
+
     def __init__(
         self,
         buffer: io.BufferedIOBase,
         filename: str,
-        author: discord.User | discord.Member,
+        author: AppUser,
     ):
         super().__init__(timeout=None)
         self.buffer = buffer
         self.filename = filename
         self.author = author
 
-    def create_message(self) -> dict[str, Any]:
+        file_uri = f"attachment://{filename}"
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay("## Mimic Sticker Maker"),
+                ui.Section(
+                    ui.TextDisplay(f"### Making Sticker By\n> {author.mention}"),
+                    accessory=ui.Thumbnail(author.display_avatar.url),
+                ),
+                ui.Separator(),
+                ui.TextDisplay(
+                    f"### Sticker Name\n> {self.filename[: -len('_sticker.webp')]}"
+                ),
+                ui.Separator(spacing=discord.SeparatorSpacing.large),
+                ui.MediaGallery(discord.MediaGalleryItem(file_uri)),
+                ui.ActionRow(self.SendButton()),
+            )
+        )
+
+    def _get_file(self):
         self.buffer.seek(0)
         file = discord.File(self.buffer, self.filename)
+        return file
+
+    def create_message(self) -> dict[str, Any]:
+        file = self._get_file()
         return {
-            "content": "**Conversion successful!**",
+            "view": self,
             "attachments": [file],
         }
 
-    @ui.button(label="Send Image", style=ButtonStyle.success)
-    async def send(self, interaction: Interaction, button):
-        await interaction.response.defer()
-        self.buffer.seek(0)
-        file = discord.File(self.buffer, self.filename)
-        await interaction.channel.send(  # type: ignore
-            content=f"**Mimic sticker created by {self.author.mention}**",
-            file=file,
+    def create_display_message(self) -> dict[str, Any]:
+        if isinstance(self.author, discord.Member):
+            color = self.author.top_role.color
+        else:
+            color = None
+        name = self.filename[: -len("_sticker.webp")]
+
+        embed = discord.Embed(
+            color=color,
+            title="Mimic Sticker",
         )
+        embed.set_thumbnail(url=self.author.display_avatar.url)
+        embed.add_field(name="Made By", value=f"> {self.author.mention}", inline=False)  # fmt: skip
+        embed.add_field(name="Sticker Name", value=f"> {name}", inline=False)
+
+        file = self._get_file()
+        embed.set_image(url=file.uri)
+
+        return {
+            "embed": embed,
+            "file": file,
+        }

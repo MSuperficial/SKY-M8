@@ -47,10 +47,14 @@ class ShortTextModal(EmptyModal):
         label: str,
         default: str | None = None,
         required: bool = True,
+        min_length: int | None = None,
+        max_length: int | None = None,
     ):
         self.text.label = label
         self.text.default = default
         self.text.required = required
+        self.text.min_length = min_length
+        self.text.max_length = max_length
         super().__init__(title=title)
 
 
@@ -64,11 +68,15 @@ class LongTextModal(EmptyModal):
         label: str,
         default: str | None = None,
         required: bool = True,
+        min_length: int | None = None,
+        max_length: int | None = None,
     ):
         self.text.style = TextStyle.long
         self.text.label = label
         self.text.default = default
         self.text.required = required
+        self.text.min_length = min_length
+        self.text.max_length = max_length
         super().__init__(title=title)
 
 
