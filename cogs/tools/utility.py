@@ -2,7 +2,7 @@ import io
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import aiohttp
 import discord
@@ -14,9 +14,12 @@ from webptools import webpmux_animate
 
 from sky_m8 import AppUser, SkyM8
 
+from ..base.views import ShortTextModal
 from ..helper.embeds import fail
 
 __all__ = ("Utility",)
+
+NoSendChannel: TypeAlias = discord.ForumChannel | discord.CategoryChannel
 
 _sticker_name_pattern = re.compile(r"^[a-zA-Z0-9_\-\. ]+$")
 
@@ -143,13 +146,9 @@ class Utility(commands.Cog):
         if not sticker_name:
             sticker_name = Path(im.filename).stem
 
+        # 发送Sticker制作面板
         maker = MimicStickerMaker(size=size)
-        buffer = maker.make_sticker(im)
-
-        # 关闭图像
-        im.close()
-        # 发送转换得到的WebP动画图片
-        view = MimicStickerMakerView(buffer, sticker_name, interaction.user)
+        view = MimicStickerMakerView(im, maker, sticker_name, interaction.user)
         msg_data = view.create_message()
         await interaction.edit_original_response(**msg_data)
 
@@ -222,40 +221,135 @@ class MimicStickerMaker:
 
 
 class MimicStickerMakerView(ui.LayoutView):
+    class SetNameButton(ui.Button["MimicStickerMakerView"]):
+        def __init__(self, name: str):
+            super().__init__(style=discord.ButtonStyle.secondary, label=name)
+
+        async def callback(self, interaction: Interaction):
+            assert self.view is not None
+            modal = ShortTextModal(
+                title="Set Sticker Name",
+                label="Name",
+                default=self.label,
+                min_length=1,
+                max_length=80,
+            )
+            await interaction.response.send_modal(modal)
+            await modal.wait()
+
+            name = modal.text.value.strip()
+            if not name:
+                return
+            if not re.match(_sticker_name_pattern, name):
+                await interaction.followup.send(
+                    embed=fail(
+                        "Invalid sticker name",
+                        (
+                            "Sticker name can only contain:\n"
+                            "- alphanumeric characters\n"
+                            "- underscores(`_`)\n"
+                            "- dashes(`-`)\n"
+                            "- dots(`.`)\n"
+                            "- spaces(` `)"
+                        ),
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            self.label = self.view.sticker_name = name
+            # make_new=False 仅改名不需要重新制作图片
+            msg_data = self.view.create_message(make_new=False)
+            await interaction.edit_original_response(**msg_data)
+
+    class SetSizeButton(ui.Button["MimicStickerMakerView"]):
+        def __init__(self, size: int):
+            super().__init__(style=discord.ButtonStyle.secondary, label=str(size))
+
+        async def callback(self, interaction: Interaction):
+            assert self.view is not None
+            modal = ShortTextModal(
+                title="Set Image Size",
+                label="Size",
+                default=self.label,
+                min_length=3,
+                max_length=4,
+            )
+            await interaction.response.send_modal(modal)
+            await modal.wait()
+
+            try:
+                size = int(modal.text.value)
+            except ValueError:
+                return
+            if size < 128 or size > 1024:
+                await interaction.followup.send(
+                    embed=fail(
+                        "Out of range",
+                        "Image size must be between 128 and 1024",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            if self.label == str(size):
+                return
+
+            self.label = str(size)
+            self.view.maker.size = size
+            msg_data = self.view.create_message()
+            await interaction.edit_original_response(**msg_data)
+
     class SendButton(ui.Button["MimicStickerMakerView"]):
         def __init__(self):
             super().__init__(style=discord.ButtonStyle.green, label="Send It!")
 
         async def callback(self, interaction: Interaction):
+            ch = interaction.channel
             assert self.view is not None
+            assert ch is not None and not isinstance(ch, NoSendChannel)
             await interaction.response.defer()
             msg_data = self.view.create_display_message()
-            await interaction.channel.send(**msg_data)  # type: ignore
+            await ch.send(**msg_data)
 
     def __init__(
         self,
-        buffer: io.BufferedIOBase,
+        image: PImage,
+        maker: MimicStickerMaker,
         sticker_name: str,
         author: AppUser,
     ):
         super().__init__(timeout=None)
-        self.buffer = buffer
+        self.image = image
+        self.maker = maker
+        self.buffer = io.BytesIO()
         self.sticker_name = sticker_name
         self.author = author
 
+        self.preview_media = discord.MediaGalleryItem("attachment://" + self.filename)
         self.add_item(
             ui.Container(
                 ui.TextDisplay("## Mimic Sticker Maker"),
                 ui.Section(
                     ui.TextDisplay(f"### Making Sticker By\n> {author.mention}"),
+                    ui.TextDisplay("-# You can use settings below to edit the image"),
                     accessory=ui.Thumbnail(author.display_avatar.url),
                 ),
                 ui.Separator(),
-                ui.TextDisplay(f"### Sticker Name\n> {self.sticker_name}"),
-                ui.Separator(spacing=discord.SeparatorSpacing.large),
-                ui.MediaGallery(
-                    discord.MediaGalleryItem("attachment://" + self.filename),
+                ui.Section(
+                    ui.TextDisplay(
+                        "### Sticker Name\n-# The displayed name of your sticker"
+                    ),
+                    accessory=self.SetNameButton(sticker_name),
                 ),
+                ui.Separator(visible=False),
+                ui.Section(
+                    ui.TextDisplay(
+                        "### Image Size\n-# Size of the image in pixels (between 128 and 1024)"
+                    ),
+                    accessory=self.SetSizeButton(maker.size),
+                ),
+                ui.Separator(spacing=discord.SeparatorSpacing.large),
+                ui.MediaGallery(self.preview_media),
                 ui.ActionRow(self.SendButton()),
             )
         )
@@ -265,13 +359,16 @@ class MimicStickerMakerView(ui.LayoutView):
         name = self.sticker_name.replace(" ", "_")
         return name + "_sticker.webp"
 
-    def _get_file(self):
+    def _get_file(self, *, make_new=True):
+        if make_new:
+            self.buffer = self.maker.make_sticker(self.image)
         self.buffer.seek(0)
         file = discord.File(self.buffer, self.filename)
         return file
 
-    def create_message(self) -> dict[str, Any]:
-        file = self._get_file()
+    def create_message(self, *, make_new=True) -> dict[str, Any]:
+        file = self._get_file(make_new=make_new)
+        self.preview_media.media.url = file.uri
         return {
             "view": self,
             "attachments": [file],
@@ -299,7 +396,7 @@ class MimicStickerMakerView(ui.LayoutView):
             inline=False,
         )
 
-        file = self._get_file()
+        file = self._get_file(make_new=False)
         embed.set_image(url=file.uri)
 
         return {
