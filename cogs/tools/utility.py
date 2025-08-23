@@ -1,6 +1,7 @@
 import io
 import os
 import re
+from itertools import chain
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -8,13 +9,14 @@ import aiohttp
 import discord
 from discord import Interaction, app_commands, ui
 from discord.ext import commands
-from PIL import Image, ImageChops, ImageOps, ImageSequence
+from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageSequence
 from PIL.Image import Image as PImage
 from webptools import webpmux_animate
 
 from sky_m8 import AppUser, SkyM8
 
 from ..base.views import ShortTextModal
+from ..emoji_manager import Emojis
 from ..helper.embeds import fail
 
 __all__ = ("Utility",)
@@ -22,6 +24,34 @@ __all__ = ("Utility",)
 NoSendChannel: TypeAlias = discord.ForumChannel | discord.CategoryChannel
 
 _sticker_name_pattern = re.compile(r"^[a-zA-Z0-9_\-\. ]+$")
+
+
+class StickerPadding:
+    _padding_options = [
+        {
+            "name": f"{v}%",
+            "value": v / 100,
+            "description": {0: "No Padding", 5: "Zoom Out", -5: "Zoon In"}.get(v),
+            "default": v == 10,
+        }
+        for v in chain(range(0, 55, 5), range(-5, -55, -5))
+    ]
+
+    @classmethod
+    def get_choices(cls):
+        return [app_commands.Choice(name=o["name"], value=o["value"]) for o in cls._padding_options]
+
+    @classmethod
+    def get_options(cls):
+        return [
+            discord.SelectOption(
+                label=o["name"],
+                value=str(o["value"]),
+                description=o["description"],
+                default=o["default"],
+            )
+            for o in cls._padding_options
+        ]
 
 
 class Utility(commands.Cog):
@@ -51,7 +81,12 @@ class Utility(commands.Cog):
         file="Use image by uploading image file.",
         url="Use image by reading from url.",
         sticker_name="The displayed name of your sticker.",
-        size="The size of made image in pixels, by default 320.",
+        size="The size of made sticker in pixels, by default 320.",
+        auto_crop="Whether to crop empty region around the image, by default True.",
+        padding="Extra padding to image border, creating zoom in/out effect, by default 10% (zoom out).",
+    )
+    @app_commands.choices(
+        padding=StickerPadding.get_choices(),
     )
     async def mimic_stickers(
         self,
@@ -60,6 +95,8 @@ class Utility(commands.Cog):
         url: str | None = None,
         sticker_name: app_commands.Range[str, 0, 80] = "",
         size: app_commands.Range[int, 128, 1024] = 320,
+        auto_crop: bool = True,
+        padding: app_commands.Range[float, -0.5, 0.5] = 0.1,
     ):
         await interaction.response.defer(ephemeral=True)
         # 至少要指定一个参数
@@ -147,25 +184,62 @@ class Utility(commands.Cog):
             sticker_name = Path(im.filename).stem
 
         # 发送Sticker制作面板
-        maker = MimicStickerMaker(size=size)
+        maker = MimicStickerMaker(
+            size=size,
+            auto_crop=auto_crop,
+            padding=padding,
+        )
         view = MimicStickerMakerView(im, maker, sticker_name, interaction.user)
         msg_data = view.create_message()
         await interaction.edit_original_response(**msg_data)
 
 
 class MimicStickerMaker:
-    def __init__(self, *, size: int = 320):
+    def __init__(
+        self,
+        *,
+        size: int = 320,
+        auto_crop: bool = True,
+        padding: float = 0.1,
+    ):
         self.size = size
+        self.auto_crop = auto_crop
+        self.padding = padding
+
+    def _get_bbox(self, im: PImage):
+        # 计算多帧图像共同的包围框，只考虑透明通道
+        # 不含透明通道直接返回完整大小，避免getbbox加载图像
+        if not im.has_transparency_data:
+            return (int(0), int(0), im.size[0], im.size[1])
+
+        bboxes: list[tuple[int, int, int, int]] = []
+        for f in ImageSequence.Iterator(im):
+            f = f.convert("RGBA").getchannel("A")
+            # 形态学开运算，移除透明通道中的噪声
+            f = f.filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))
+            b = f.getbbox()
+            if b is not None:
+                bboxes.append(b)
+        im.seek(0)
+        if len(bboxes) == 0:
+            return None
+
+        x0, y0, x1, y1 = list(zip(*bboxes))
+        bbox: tuple[int, int, int, int] = min(x0), min(y0), max(x1), max(y1)
+        return bbox
 
     def _make_singleframe(self, frame: PImage, duration: int, loop: int):
         # 如果输入是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
         # 因为在使用PIL保存WebP图片时，编码算法会将连续重复帧进行优化，导致无法生成多帧图片
         frame.save("_temp_frame.webp", quality=90, method=4)
+        # +duration+offset_x+offset_y+dispose+blend
+        # dispose 0: NONE 1: BACKGROUND
+        # blend +b: BLEND -b: NO_BLEND
         webpmux_animate(
             [f"_temp_frame.webp +{duration}+0+0+1+b"] * 2,
             "_temp_sticker.webp",
-            str(loop),
-            "0,0,0,0",
+            loop=str(loop),
+            bgcolor="0,0,0,0",
         )
         with open("_temp_sticker.webp", "rb") as f:
             buffer = io.BytesIO(f.read())
@@ -194,6 +268,7 @@ class MimicStickerMaker:
         f0 = frames[0]
         for f in frames[1:]:
             diff = ImageChops.difference(f0, f)
+            # 设置alpha_only=False，需要对比所有通道而非只有透明通道
             if diff.getbbox(alpha_only=False):
                 return False
         return True
@@ -202,12 +277,26 @@ class MimicStickerMaker:
         # 获取图片信息
         duration = im.info.get("duration", 500)
         loop = im.info.get("loop", 0)
+        bbox = (0, 0, im.size[0], im.size[1])
+        # 自动裁剪参数
+        if self.auto_crop:
+            bbox = self._get_bbox(im) or bbox
+        # padding参数
+        factor = 1 / (1 - self.padding) if self.padding >= 0 else 1 + self.padding
+        x0, y0, x1, y1 = bbox
+        rect_size = x1 - x0, y1 - y0
+        w_diff, h_diff = [(s * factor - s) / 2 for s in rect_size]
+        rect = x0 - w_diff, y0 - h_diff, x1 + w_diff, y1 + h_diff
 
         # 每一帧转换格式
         frames: list[PImage] = []
         for f in ImageSequence.Iterator(im):
+            # 转换为RGBA（原图像可能是palette格式图像，不适合进行插值运算）
             f = f.convert("RGBA")
+            # padding + resize 到目标尺寸
+            f = f.crop(rect)
             f = ImageOps.pad(f, (self.size, self.size))
+            # 向右填充一倍尺寸的空白，使得贴纸在客户端上显示尺寸缩小
             f = ImageOps.pad(f, (self.size * 2, self.size), centering=(0, 0))
             frames.append(f)
 
@@ -258,7 +347,7 @@ class MimicStickerMakerView(ui.LayoutView):
                 return
 
             self.label = self.view.sticker_name = name
-            # make_new=False 仅改名不需要重新制作图片
+            # 设置make_new=False，仅改名不需要重新制作图片
             msg_data = self.view.create_message(make_new=False)
             await interaction.edit_original_response(**msg_data)
 
@@ -299,6 +388,57 @@ class MimicStickerMakerView(ui.LayoutView):
             msg_data = self.view.create_message()
             await interaction.edit_original_response(**msg_data)
 
+    class CropToggleButton(ui.Button["MimicStickerMakerView"]):
+        def __init__(self, value: bool):
+            super().__init__(
+                style=discord.ButtonStyle.secondary,
+                label="Enabled" if value else "Disabled",
+                emoji=Emojis("success", "✅") if value else Emojis("cancel", "➖"),
+            )
+
+        @property
+        def value_text(self):
+            assert self.view is not None
+            value = self.view.maker.auto_crop
+            return "Enabled" if value else "Disabled"
+
+        @property
+        def value_emoji(self):
+            assert self.view is not None
+            value = self.view.maker.auto_crop
+            return Emojis("success", "✅") if value else Emojis("cancel", "➖")
+
+        async def callback(self, interaction: Interaction):
+            await interaction.response.defer()
+            assert self.view is not None
+            value = not self.view.maker.auto_crop
+
+            self.view.maker.auto_crop = value
+            self.label = self.value_text
+            self.emoji = self.value_emoji
+            msg_data = self.view.create_message()
+            await interaction.edit_original_response(**msg_data)
+
+    class PaddingSetting(ui.ActionRow["MimicStickerMakerView"]):
+        def __init__(self, value: float):
+            super().__init__()
+            self._update_option(value)
+
+        def _update_option(self, value: float):
+            for option in self.select_padding.options:
+                option.default = option.value == str(value)
+
+        @ui.select(options=StickerPadding.get_options())
+        async def select_padding(self, interaction: Interaction, select: ui.Select):
+            await interaction.response.defer()
+            assert self.view is not None
+            value = float(select.values[0])
+
+            self.view.maker.padding = value
+            self._update_option(value)
+            msg_data = self.view.create_message()
+            await interaction.edit_original_response(**msg_data)
+
     class SendButton(ui.Button["MimicStickerMakerView"]):
         def __init__(self):
             super().__init__(style=discord.ButtonStyle.green, label="Send It!")
@@ -336,18 +476,26 @@ class MimicStickerMakerView(ui.LayoutView):
                 ),
                 ui.Separator(),
                 ui.Section(
-                    ui.TextDisplay(
-                        "### Sticker Name\n-# The displayed name of your sticker"
-                    ),
+                    ui.TextDisplay("### Sticker Name\n-# The displayed name of your sticker"),
                     accessory=self.SetNameButton(sticker_name),
                 ),
                 ui.Separator(visible=False),
                 ui.Section(
                     ui.TextDisplay(
-                        "### Image Size\n-# Size of the image in pixels (between 128 and 1024)"
+                        "### Sticker Size\n-# Size of the sticker in pixels (between 128 and 1024)"
                     ),
                     accessory=self.SetSizeButton(maker.size),
                 ),
+                ui.Separator(visible=False),
+                ui.Section(
+                    ui.TextDisplay("### Auto Crop\n-# Crop empty region around the image"),
+                    accessory=self.CropToggleButton(maker.auto_crop),
+                ),
+                ui.Separator(visible=False),
+                ui.TextDisplay(
+                    "### Padding\n-# Extra padding to image border, creating zoom in/out effect"
+                ),
+                self.PaddingSetting(maker.padding),
                 ui.Separator(spacing=discord.SeparatorSpacing.large),
                 ui.MediaGallery(self.preview_media),
                 ui.ActionRow(self.SendButton()),
