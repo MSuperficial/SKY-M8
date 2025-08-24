@@ -3,7 +3,7 @@ import os
 import re
 from itertools import chain
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias, overload
 
 import aiohttp
 import discord
@@ -17,13 +17,13 @@ from sky_m8 import AppUser, SkyM8
 
 from ..base.views import ShortTextModal
 from ..emoji_manager import Emojis
-from ..helper.embeds import fail
+from ..helper.embeds import fail, success
 
 __all__ = ("Utility",)
 
 NoSendChannel: TypeAlias = discord.ForumChannel | discord.CategoryChannel
 
-_sticker_name_pattern = re.compile(r"^[a-zA-Z0-9_\-\. ]+$")
+_sticker_name_pattern = re.compile(r"^[a-zA-Z0-9_\-\. ]{1,32}$")
 
 
 class StickerPadding:
@@ -32,7 +32,7 @@ class StickerPadding:
             "name": f"{v}%",
             "value": v / 100,
             "description": {0: "No Padding", 5: "Zoom Out", -5: "Zoon In"}.get(v),
-            "default": v == 10,
+            "default": v == 0,
         }
         for v in chain(range(0, 55, 5), range(-5, -55, -5))
     ]
@@ -83,7 +83,7 @@ class Utility(commands.Cog):
         sticker_name="The displayed name of your sticker.",
         size="The size of made sticker in pixels, by default 320.",
         auto_crop="Whether to crop empty region around the image, by default True.",
-        padding="Extra padding to image border, creating zoom in/out effect, by default 10% (zoom out).",
+        padding="Extra padding to image border, creating zoom in/out effect, by default 0% (no padding).",
     )
     @app_commands.choices(
         padding=StickerPadding.get_choices(),
@@ -93,10 +93,10 @@ class Utility(commands.Cog):
         interaction: Interaction,
         file: discord.Attachment | None = None,
         url: str | None = None,
-        sticker_name: app_commands.Range[str, 0, 80] = "",
+        sticker_name: app_commands.Range[str, 0, 32] = "",
         size: app_commands.Range[int, 128, 1024] = 320,
         auto_crop: bool = True,
-        padding: app_commands.Range[float, -0.5, 0.5] = 0.1,
+        padding: app_commands.Range[float, -0.5, 0.5] = 0.0,
     ):
         await interaction.response.defer(ephemeral=True)
         # 至少要指定一个参数
@@ -181,7 +181,7 @@ class Utility(commands.Cog):
 
         im.filename = im.filename or "mimic.webp"
         if not sticker_name:
-            sticker_name = Path(im.filename).stem
+            sticker_name = Path(im.filename).stem[:32]
 
         # 发送Sticker制作面板
         maker = MimicStickerMaker(
@@ -200,7 +200,7 @@ class MimicStickerMaker:
         *,
         size: int = 320,
         auto_crop: bool = True,
-        padding: float = 0.1,
+        padding: float = 0.0,
     ):
         self.size = size
         self.auto_crop = auto_crop
@@ -264,6 +264,17 @@ class MimicStickerMaker:
         )
         return buffer
 
+    def _make_staticframe(self, frame: PImage):
+        # 用于创建单帧缩略图
+        buffer = io.BytesIO()
+        frame.save(
+            buffer,
+            format="WEBP",
+            quality=90,
+            method=4,
+        )
+        return buffer
+
     def _frames_identical(self, frames: list[PImage]):
         f0 = frames[0]
         for f in frames[1:]:
@@ -273,7 +284,16 @@ class MimicStickerMaker:
                 return False
         return True
 
-    def make_sticker(self, im: PImage):
+    # fmt: off
+    @overload
+    def make_sticker(self, im: PImage) -> io.BytesIO: ...
+    @overload
+    def make_sticker(self, im: PImage, *, thumbnail: Literal[False]) -> io.BytesIO: ...
+    @overload
+    def make_sticker(self, im: PImage, *, thumbnail: Literal[True]) -> tuple[io.BytesIO, io.BytesIO]: ...
+    # fmt: on
+
+    def make_sticker(self, im: PImage, *, thumbnail: bool = False):
         # 获取图片信息
         duration = im.info.get("duration", 500)
         loop = im.info.get("loop", 0)
@@ -290,23 +310,33 @@ class MimicStickerMaker:
 
         # 每一帧转换格式
         frames: list[PImage] = []
+        tn_frames: list[PImage] = []
         for f in ImageSequence.Iterator(im):
             # 转换为RGBA（原图像可能是palette格式图像，不适合进行插值运算）
             f = f.convert("RGBA")
             # padding + resize 到目标尺寸
             f = f.crop(rect)
             f = ImageOps.pad(f, (self.size, self.size))
+            # 创建缩略图
+            if thumbnail:
+                tn = f.resize((128, 128), resample=Image.Resampling.BICUBIC)
+                tn_frames.append(tn)
             # 向右填充一倍尺寸的空白，使得贴纸在客户端上显示尺寸缩小
             f = ImageOps.pad(f, (self.size * 2, self.size), centering=(0, 0))
             frames.append(f)
 
         # 如果所有帧都相同，则取第一帧并以单帧的方法做处理
+        tn_buffer = io.BytesIO()
         if len(frames) == 1 or self._frames_identical(frames):
             buffer = self._make_singleframe(frames[0], duration, loop)
+            if thumbnail:
+                tn_buffer = self._make_staticframe(tn_frames[0])
         else:
             buffer = self._make_multiframe(frames, duration, loop)
+            if thumbnail:
+                tn_buffer = self._make_multiframe(tn_frames, duration, loop)
 
-        return buffer
+        return (buffer, tn_buffer) if thumbnail else buffer
 
 
 class MimicStickerMakerView(ui.LayoutView):
@@ -321,7 +351,7 @@ class MimicStickerMakerView(ui.LayoutView):
                 label="Name",
                 default=self.label,
                 min_length=1,
-                max_length=80,
+                max_length=32,
             )
             await interaction.response.send_modal(modal)
             await modal.wait()
@@ -426,7 +456,7 @@ class MimicStickerMakerView(ui.LayoutView):
 
         def _update_option(self, value: float):
             for option in self.select_padding.options:
-                option.default = option.value == str(value)
+                option.default = float(option.value) == value
 
         @ui.select(options=StickerPadding.get_options())
         async def select_padding(self, interaction: Interaction, select: ui.Select):
@@ -451,6 +481,93 @@ class MimicStickerMakerView(ui.LayoutView):
             msg_data = self.view.create_display_message()
             await ch.send(**msg_data)
 
+    class CreateEmojiButton(ui.Button["MimicStickerMakerView"]):
+        def __init__(self, *, disabled: bool):
+            super().__init__(
+                style=discord.ButtonStyle.blurple,
+                label="Create Emoji",
+                disabled=disabled,
+            )
+
+        async def callback(self, interaction: Interaction):
+            await interaction.response.defer()
+            user = interaction.user
+            guild = interaction.guild
+            assert guild is not None
+            assert self.view is not None
+
+            # 检查权限
+            perm = guild.me.guild_permissions
+            if not (perm.create_expressions and perm.manage_expressions):
+                await interaction.followup.send(
+                    embed=fail(
+                        "Missing Permission",
+                        f"Please add `Create Expressions` and `Manage Expressions` permission for {guild.me.mention} first.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            if self.view.emoji is None:
+                # 创建emoji
+                data = self.view.emoji_buffer.getvalue()
+                try:
+                    self.view.emoji = await guild.create_custom_emoji(
+                        name=self.view.emoji_name,
+                        image=data,
+                        reason=f"Created by {user.name}:{user.id}",
+                    )
+                    await interaction.followup.send(
+                        content=str(self.view.emoji),
+                        embed=success("Emoji created", f"`:{self.view.emoji.name}:`"),
+                        ephemeral=True,
+                    )
+                except Exception as ex:
+                    await interaction.followup.send(embed=fail("Error", ex), ephemeral=True)
+                    return
+
+                self.view.emoji_state = 0
+                self.label = "Edit Emoji"
+                await interaction.edit_original_response(view=self.view)
+                return
+            else:
+                # 编辑emoji
+                if self.view.emoji_state == 0:
+                    # 无需更新
+                    return
+                elif self.view.emoji_state == 1:
+                    # emoji改名
+                    try:
+                        self.view.emoji = await self.view.emoji.edit(
+                            name=self.view.emoji_name,
+                            reason=f"Edited by {user.name}:{user.id}",
+                        )
+                        await interaction.followup.send(
+                            embed=success("Emoji name edited", f"`:{self.view.emoji.name}:`"),
+                            ephemeral=True,
+                        )
+                        self.view.emoji_state = 0
+                    except Exception as ex:
+                        await interaction.followup.send(embed=fail("Error", ex), ephemeral=True)
+                elif self.view.emoji_state == 2:
+                    # emoji更新图像（先删除再创建）
+                    try:
+                        await self.view.emoji.delete(reason=f"Recreated by {user.name}:{user.id}")
+                        data = self.view.emoji_buffer.getvalue()
+                        self.view.emoji = await guild.create_custom_emoji(
+                            name=self.view.emoji_name,
+                            image=data,
+                            reason=f"Recreated by {user.name}:{user.id}",
+                        )
+                        await interaction.followup.send(
+                            content=str(self.view.emoji),
+                            embed=success("Emoji updated", f"`:{self.view.emoji.name}:`"),
+                            ephemeral=True,
+                        )
+                        self.view.emoji_state = 0
+                    except Exception as ex:
+                        await interaction.followup.send(embed=fail("Error", ex), ephemeral=True)
+
     def __init__(
         self,
         image: PImage,
@@ -464,6 +581,10 @@ class MimicStickerMakerView(ui.LayoutView):
         self.buffer = io.BytesIO()
         self.sticker_name = sticker_name
         self.author = author
+
+        self.emoji_buffer = io.BytesIO()
+        self.emoji: discord.Emoji | None = None
+        self.emoji_state = 2  # 0: 最新 1: 改名 2: 改图像
 
         self.preview_media = discord.MediaGalleryItem("attachment://" + self.filename)
         self.add_item(
@@ -498,7 +619,11 @@ class MimicStickerMakerView(ui.LayoutView):
                 self.PaddingSetting(maker.padding),
                 ui.Separator(spacing=discord.SeparatorSpacing.large),
                 ui.MediaGallery(self.preview_media),
-                ui.ActionRow(self.SendButton()),
+                ui.ActionRow(
+                    self.SendButton(),
+                    # 是User类型说明不在服务器里，不能创建emoji
+                    self.CreateEmojiButton(disabled=isinstance(author, discord.User)),
+                ),
             )
         )
 
@@ -507,15 +632,26 @@ class MimicStickerMakerView(ui.LayoutView):
         name = self.sticker_name.replace(" ", "_")
         return name + "_sticker.webp"
 
-    def _get_file(self, *, make_new=True):
+    @property
+    def emoji_name(self):
+        trans = str.maketrans("-. ", "___")
+        name = self.sticker_name.translate(trans)
+        if len(name) < 2:
+            name += "_"
+        return name
+
+    def _create_file(self, *, make_new=True):
+        self.emoji_state = 1
         if make_new:
-            self.buffer = self.maker.make_sticker(self.image)
+            self.buffer, self.emoji_buffer = self.maker.make_sticker(self.image, thumbnail=True)
+            self.emoji_state = 2
         self.buffer.seek(0)
+        self.emoji_buffer.seek(0)
         file = discord.File(self.buffer, self.filename)
         return file
 
     def create_message(self, *, make_new=True) -> dict[str, Any]:
-        file = self._get_file(make_new=make_new)
+        file = self._create_file(make_new=make_new)
         self.preview_media.media.url = file.uri
         return {
             "view": self,
@@ -544,7 +680,7 @@ class MimicStickerMakerView(ui.LayoutView):
             inline=False,
         )
 
-        file = self._get_file(make_new=False)
+        file = self._create_file(make_new=False)
         embed.set_image(url=file.uri)
 
         return {
