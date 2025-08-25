@@ -2,10 +2,12 @@ import io
 import os
 import re
 from itertools import chain
+from math import pi
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, overload
+from typing import Any, Literal, Sequence, TypeAlias, overload
 
 import aiohttp
+import cairo
 import discord
 from discord import Interaction, app_commands, ui
 from discord.ext import commands
@@ -54,6 +56,30 @@ class StickerPadding:
         ]
 
 
+class StickerRoundness:
+    _roundness_options = [
+        {
+            "name": f"{v}%",
+            "value": v / 100,
+            "default": v == 0,
+        }
+        for v in range(0, 105, 5)
+    ]
+
+    @classmethod
+    def get_choices(cls):
+        return [
+            app_commands.Choice(name=o["name"], value=o["value"]) for o in cls._roundness_options
+        ]
+
+    @classmethod
+    def get_options(cls):
+        return [
+            discord.SelectOption(label=o["name"], value=str(o["value"]), default=o["default"])
+            for o in cls._roundness_options
+        ]
+
+
 class Utility(commands.Cog):
     group_utility = app_commands.Group(
         name="utility",
@@ -84,9 +110,11 @@ class Utility(commands.Cog):
         size="The size of made sticker in pixels, by default 320.",
         auto_crop="Whether to crop empty region around the image, by default True.",
         padding="Extra padding to image border, creating zoom in (negative) or out (positive) effect, by default 0% (no padding).",
+        roundness="Relative size of rounded corner added to the sticker, by default 0% (no rounded corner)",
     )
     @app_commands.choices(
         padding=StickerPadding.get_choices(),
+        roundness=StickerRoundness.get_choices(),
     )
     async def mimic_stickers(
         self,
@@ -97,6 +125,7 @@ class Utility(commands.Cog):
         size: app_commands.Range[int, 128, 1024] = 320,
         auto_crop: bool = True,
         padding: app_commands.Range[float, -0.5, 0.5] = 0.0,
+        roundness: app_commands.Range[float, 0.0, 1.0] = 0.0,
     ):
         await interaction.response.defer(ephemeral=True)
         # 至少要指定一个参数
@@ -188,6 +217,7 @@ class Utility(commands.Cog):
             size=size,
             auto_crop=auto_crop,
             padding=padding,
+            roundness=roundness,
         )
         view = MimicStickerMakerView(im, maker, sticker_name, interaction.user)
         msg_data = view.create_message()
@@ -201,10 +231,12 @@ class MimicStickerMaker:
         size: int = 320,
         auto_crop: bool = True,
         padding: float = 0.0,
+        roundness: float = 0.0,
     ):
         self.size = size
         self.auto_crop = auto_crop
         self.padding = padding
+        self.roundness = roundness
 
     def _get_bbox(self, im: PImage):
         # 计算多帧图像共同的包围框，只考虑透明通道
@@ -227,6 +259,26 @@ class MimicStickerMaker:
         x0, y0, x1, y1 = list(zip(*bboxes))
         bbox: tuple[int, int, int, int] = min(x0), min(y0), max(x1), max(y1)
         return bbox
+
+    def _get_rounded_mask(self, coords: Sequence[float], radius: float):
+        x0, y0, x1, y1 = coords
+        angle = pi / 2
+        surface = cairo.ImageSurface(cairo.FORMAT_RGB24, self.size, self.size)
+        cr = cairo.Context(surface)
+        cr.arc(x0 + radius, y0 + radius, radius, 2 * angle, 3 * angle)
+        cr.arc(x1 - radius, y0 + radius, radius, 3 * angle, 0 * angle)
+        cr.arc(x1 - radius, y1 - radius, radius, 0 * angle, 1 * angle)
+        cr.arc(x0 + radius, y1 - radius, radius, 1 * angle, 2 * angle)
+        cr.close_path()
+        cr.set_source_rgb(1, 1, 1)
+        cr.fill()
+
+        with surface.get_data() as memory:
+            stride = surface.get_stride()
+            mask = Image.frombuffer("RGB", (self.size, self.size), memory, "raw", "BGRX", stride, 1)
+            mask = mask.convert("L")
+
+        return mask
 
     def _make_singleframe(self, frame: PImage, duration: int, loop: int):
         # 如果输入是单帧图像，使用webpmux工具合成动画WebP文件，再读取到缓冲区
@@ -325,6 +377,29 @@ class MimicStickerMaker:
                     diff = (correct_w - sw) / 2
                     full_box = sx0 - diff, sy0, sx1 + diff, sy1
 
+        # roundness参数
+        mask = PImage()
+        if self.roundness > 0:
+            # 计算full_box对应正方形的原点（左上角）
+            fx0, fy0, fx1, fy1 = full_box
+            f_w, f_h = fx1 - fx0, fy1 - fy0
+            if f_w > f_h:
+                origin = fx0, fy0 - (f_w - f_h) / 2
+            else:
+                origin = fx0 - (f_h - f_w) / 2, fy0
+            # 计算圆角矩形区域相对于原点的坐标
+            round_box = full_box if self.padding < 0 else bbox
+            rbox_relative = [b - o for b, o in zip(round_box, origin * 2)]
+            # 缩放到目标尺寸
+            scale = self.size / max(f_w, f_h)
+            round_box = [b * scale for b in rbox_relative]
+            # 圆角半径
+            rx0, ry0, rx1, ry1 = round_box
+            round_radius = min(rx1 - rx0, ry1 - ry0) / 2
+            round_radius *= self.roundness
+            # 绘制圆角矩形遮罩
+            mask = self._get_rounded_mask(round_box, round_radius)
+
         # 每一帧转换格式
         frames: list[PImage] = []
         tn_frames: list[PImage] = []
@@ -334,6 +409,11 @@ class MimicStickerMaker:
             # padding + resize 到目标尺寸
             f = f.crop(full_box)
             f = ImageOps.pad(f, (self.size, self.size))
+            # 应用圆角矩形遮罩
+            if self.roundness > 0:
+                a = f.getchannel("A")
+                a = ImageChops.multiply(a, mask).convert("L")
+                f.putalpha(a)
             # 创建缩略图
             if thumbnail:
                 tn = f.resize((128, 128), resample=Image.Resampling.BICUBIC)
@@ -486,6 +566,26 @@ class MimicStickerMakerView(ui.LayoutView):
             msg_data = self.view.create_message()
             await interaction.edit_original_response(**msg_data)
 
+    class RoundnessSetting(ui.ActionRow["MimicStickerMakerView"]):
+        def __init__(self, value: float):
+            super().__init__()
+            self._update_option(value)
+
+        def _update_option(self, value: float):
+            for option in self.select_roundness.options:
+                option.default = float(option.value) == value
+
+        @ui.select(options=StickerRoundness.get_options())
+        async def select_roundness(self, interaction: Interaction, select: ui.Select):
+            await interaction.response.defer()
+            assert self.view is not None
+            value = float(select.values[0])
+
+            self.view.maker.roundness = value
+            self._update_option(value)
+            msg_data = self.view.create_message()
+            await interaction.edit_original_response(**msg_data)
+
     class SendButton(ui.Button["MimicStickerMakerView"]):
         def __init__(self):
             super().__init__(style=discord.ButtonStyle.green, label="Send It!")
@@ -634,6 +734,10 @@ class MimicStickerMakerView(ui.LayoutView):
                     "### Padding\n-# Extra padding to image border, creating zoom in/out effect"
                 ),
                 self.PaddingSetting(maker.padding),
+                ui.TextDisplay(
+                    "### Roundness\n-# Relative size of rounded corner added to the sticker"
+                ),
+                self.RoundnessSetting(maker.roundness),
                 ui.Separator(spacing=discord.SeparatorSpacing.large),
                 ui.MediaGallery(self.preview_media),
                 ui.ActionRow(
