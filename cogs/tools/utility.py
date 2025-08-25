@@ -83,7 +83,7 @@ class Utility(commands.Cog):
         sticker_name="The displayed name of your sticker.",
         size="The size of made sticker in pixels, by default 320.",
         auto_crop="Whether to crop empty region around the image, by default True.",
-        padding="Extra padding to image border, creating zoom in/out effect, by default 0% (no padding).",
+        padding="Extra padding to image border, creating zoom in (negative) or out (positive) effect, by default 0% (no padding).",
     )
     @app_commands.choices(
         padding=StickerPadding.get_choices(),
@@ -298,15 +298,32 @@ class MimicStickerMaker:
         duration = im.info.get("duration", 500)
         loop = im.info.get("loop", 0)
         bbox = (0, 0, im.size[0], im.size[1])
+
         # 自动裁剪参数
         if self.auto_crop:
             bbox = self._get_bbox(im) or bbox
+
         # padding参数
-        factor = 1 / (1 - self.padding) if self.padding >= 0 else 1 + self.padding
-        x0, y0, x1, y1 = bbox
-        rect_size = x1 - x0, y1 - y0
-        w_diff, h_diff = [(s * factor - s) / 2 for s in rect_size]
-        rect = x0 - w_diff, y0 - h_diff, x1 + w_diff, y1 + h_diff
+        full_box = bbox  # full_box：padding后的完整图像区域
+        if self.padding != 0:
+            x0, y0, x1, y1 = full_box
+            w, h = x1 - x0, y1 - y0
+            # 计算padding对应的缩放系数并应用到full_box
+            factor = 1 / (1 - self.padding) if self.padding >= 0 else 1 + self.padding
+            w_diff, h_diff = [(s * factor - s) / 2 for s in (w, h)]
+            full_box = x0 - w_diff, y0 - h_diff, x1 + w_diff, y1 + h_diff
+            # 对于放大的情况，需要计算正确的宽和高
+            if self.padding < 0:
+                sx0, sy0, sx1, sy1 = full_box
+                sw, sh = sx1 - sx0, sy1 - sy0
+                if sw > sh:
+                    correct_h = min(h, sw)
+                    diff = (correct_h - sh) / 2
+                    full_box = sx0, sy0 - diff, sx1, sy1 + diff
+                else:
+                    correct_w = min(w, sh)
+                    diff = (correct_w - sw) / 2
+                    full_box = sx0 - diff, sy0, sx1 + diff, sy1
 
         # 每一帧转换格式
         frames: list[PImage] = []
@@ -315,7 +332,7 @@ class MimicStickerMaker:
             # 转换为RGBA（原图像可能是palette格式图像，不适合进行插值运算）
             f = f.convert("RGBA")
             # padding + resize 到目标尺寸
-            f = f.crop(rect)
+            f = f.crop(full_box)
             f = ImageOps.pad(f, (self.size, self.size))
             # 创建缩略图
             if thumbnail:
