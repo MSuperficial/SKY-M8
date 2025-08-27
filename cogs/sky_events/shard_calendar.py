@@ -45,6 +45,50 @@ shard_cfg = _ShardCfg(
 )
 
 
+_default_shard_cfg = _ShardCfg(
+    coming_days=7,
+    emojis={
+        "Black": "⚫",
+        "Red": "🔴",
+        "Wax": "Wax",
+        "AC": "AC",
+        "Map": "📍",
+        "Timeline": "⏳",
+        "Next": "⤵️",
+        "Memory": "💠",
+        "Crystal": "💠",
+    },
+    infographics={},
+    translations={
+        "prairie": "Daylight Prairie",
+        "forest": "Hidden Forest",
+        "valley": "Valley of Triumph",
+        "wasteland": "Golden Wasteland",
+        "vault": "Vault of Knowledge",
+        "village": "Village Islands",
+        "butterfly": "Butterfly Fields",
+        "cave": "Prairie Cave",
+        "bird": "Bird Nest",
+        "sanctuary": "Sanctuary Islands",
+        "boneyard": "Boneyard",
+        "brook": "Forest Brook",
+        "end": "Forest End",
+        "treehouse": "Assembly Treehouse",
+        "granny": "Elevated Clearing",
+        "rink": "Ice Rink",
+        "dreams": "Village of Dreams",
+        "hermit": "Hermit Valley",
+        "battlefield": "Battlefield",
+        "temple": "Broken Temple",
+        "graveyard": "Graveyard",
+        "crab": "Crab Fields",
+        "ark": "Forgotten Ark",
+        "starlight": "Starlight Desert",
+        "jellyfish": "Jellyfish Cove",
+    },
+)
+
+
 class ShardCalendar(
     LiveUpdateCog,
     live_key="shardCalendar.webhooks",
@@ -75,16 +119,16 @@ class ShardCalendar(
     async def get_config(cls):
         config: _ShardCfg = await remote_config.get_json(cls._CONFIG_KEY)  # type: ignore
 
-        trans = _default_translation | config.get("translations", {})
+        trans = _default_shard_cfg["translations"] | config.get("translations", {})
         config["translations"] = trans
 
-        emoji_mapping: dict[str, str] = config.get("emojis", {})  # type: ignore
-        emoji_override = {k: Emojis(v, v) for k, v in emoji_mapping.items()}
-        emojis = Emojis.emojis | emoji_override
+        emoji_mapping = config.get("emojis", {})
+        emoji_override = {k: Emojis(str(v), str(v)) for k, v in emoji_mapping.items()}
+        emojis = Emojis.emojis | _default_shard_cfg["emojis"] | emoji_override
         config["emojis"] = emojis
 
-        config.setdefault("coming_days", 7)
-        config.setdefault("infographics", {})
+        config.setdefault("coming_days", _default_shard_cfg["coming_days"])
+        config.setdefault("infographics", _default_shard_cfg["infographics"])
 
         return config
 
@@ -181,9 +225,7 @@ class ShardCalendar(
             # 日期格式错误
             day_range = calendar.monthrange(year, month)[1]
             await interaction.response.send_message(
-                embed=fail(
-                    "Out of range", f"Maximum `day` is `{day_range}` for the month."
-                ),
+                embed=fail("Out of range", f"Maximum `day` is `{day_range}` for the month."),
                 ephemeral=True,
             )
             return
@@ -237,9 +279,7 @@ class ShardCalendar(
             # 日期格式错误
             day_range = calendar.monthrange(year, month)[1]
             await interaction.response.send_message(
-                embed=fail(
-                    "Out of range", f"Maximum `day` is `{day_range}` for the month."
-                ),
+                embed=fail("Out of range", f"Maximum `day` is `{day_range}` for the month."),
                 ephemeral=True,
             )
             return
@@ -303,12 +343,10 @@ class ShardEmbedBuilder:
 
     def _type_field(self, info: ShardInfo):
         # 碎片类型信息
-        field = f"{info.type.name} Shard"
-        # 如果设置了emoji就添加
-        if type_emoji := self.emojis.get(info.type.name):
-            field = f"{type_emoji} {field}"
+        type_emoji = self.emojis[info.type.name]
+        field = f"{type_emoji} {info.type.name} Shard"
         # 奖励类型及数量
-        reward_unit = self.emojis.get(info.reward_type.name, info.reward_type.name)
+        reward_unit = self.emojis[info.reward_type.name]
         field += f" [{info.reward_number}{reward_unit}]"
         return field
 
@@ -341,8 +379,7 @@ class ShardEmbedBuilder:
         def _symbol(when: datetime):
             _info = get_shard_info(when)
             if _info.has_shard:
-                default = {ShardType.Black: "⚫", ShardType.Red: "🔴"}
-                symbol = str(self.emojis.get(_info.type.name, default[_info.type]))
+                symbol = str(self.emojis[_info.type.name])
             else:
                 symbol = "☀️"
             if when.weekday() == 0:
@@ -363,17 +400,17 @@ class ShardEmbedBuilder:
                     description=f"-# Shard Calendar - {self._date_field(info)}\n## {self._type_field(info)}",
                 )
                 .add_field(
-                    name=f"{self.emojis.get('Map', '📍')} __Map__",
+                    name=f"{self.emojis['Map']} __Map__",
                     value=self._map_field(info),
                     inline=True,
                 )
                 .add_field(
-                    name=f"{self.emojis.get('Timeline', '⏳')} __Timeline__",
+                    name=f"{self.emojis['Timeline']} __Timeline__",
                     value=self._timeline_field(info, now),
                     inline=False,
                 )
                 .add_field(
-                    name=f"{self.emojis.get('Next', '⤵️')} __Coming days__",
+                    name=f"{self.emojis['Next']} __Coming days__",
                     value=self._coming_field(info, self.config["coming_days"]),
                     inline=False,
                 )
@@ -388,7 +425,7 @@ class ShardEmbedBuilder:
                     description=f"-# Shard Calendar - {timestamp(info.date, 'D')}\n## ☀️ No Shard Day",
                 )
                 .add_field(
-                    name=f"{self.emojis.get('Next', '⤵️')} __Coming days__",
+                    name=f"{self.emojis['Next']} __Coming days__",
                     value=self._coming_field(info, self.config["coming_days"]),
                 )
                 .set_image(url=graph.get("noshard"))
@@ -405,7 +442,7 @@ class ShardEmbedBuilder:
         if info.type != ShardType.Red:
             return
         graph = self.config["infographics"]
-        title = f"{self.emojis.get('Memory', '💠')} __Memory__"
+        title = f"{self.emojis['Memory']} __Memory__"
         # 显示Shard Memory信息
         if not (extra and extra.has_memory):
             embeds[0].insert_field_at(1, name=title, value="*Unknown yet*", inline=True)
@@ -415,7 +452,7 @@ class ShardEmbedBuilder:
             # 显示Shard Memory图片
             memory_embed = discord.Embed(
                 color=self._embed_color(info),
-                title=f"{self.emojis.get('Crystal', '💠')} Shard Memory [{memory.name}]",
+                title=f"{self.emojis['Crystal']} Shard Memory [{memory.name}]",
             ).set_image(
                 url=graph.get(f"memory.{memory.value}"),
             )
@@ -449,8 +486,7 @@ class ShardNavView(AutoDisableView):
             # 如果是今天的按钮，且当前显示日期也为今天，则禁用
             is_today = dt == "today" and now.date() == date.date()
             if info.has_shard:
-                default = {ShardType.Black: "⚫", ShardType.Red: "🔴"}
-                emoji = str(emojis.get(info.type.name, default[info.type]))
+                emoji = str(emojis[info.type.name])
             else:
                 emoji = "☀️"
             self.add_item(
@@ -506,7 +542,7 @@ class ShardNavButton(
             date = sky_datetime(date.year, date.month, date.day)
         return cls(date=date, persistent=bool(int(match["persistent"])))
 
-    async def callback(self, interaction: Interaction):
+    async def callback(self, interaction: Interaction):  # type: ignore
         await interaction.response.defer()
         if isinstance(self.date, datetime):
             date = self.date
@@ -528,35 +564,6 @@ class ShardNavButton(
             view.response_msg = msg
         else:
             await interaction.edit_original_response(embeds=embeds, view=view)
-
-
-_default_translation = {
-    "prairie": "Daylight Prairie",
-    "forest": "Hidden Forest",
-    "valley": "Valley of Triumph",
-    "wasteland": "Golden Wasteland",
-    "vault": "Vault of Knowledge",
-    "village": "Village Islands",
-    "butterfly": "Butterfly Fields",
-    "cave": "Prairie Cave",
-    "bird": "Bird Nest",
-    "sanctuary": "Sanctuary Islands",
-    "boneyard": "Boneyard",
-    "brook": "Forest Brook",
-    "end": "Forest End",
-    "treehouse": "Assembly Treehouse",
-    "granny": "Elevated Clearing",
-    "rink": "Ice Rink",
-    "dreams": "Village of Dreams",
-    "hermit": "Hermit Valley",
-    "battlefield": "Battlefield",
-    "temple": "Broken Temple",
-    "graveyard": "Graveyard",
-    "crab": "Crab Fields",
-    "ark": "Forgotten Ark",
-    "starlight": "Starlight Desert",
-    "jellyfish": "Jellyfish Cove",
-}
 
 
 async def setup(bot: SkyM8):
