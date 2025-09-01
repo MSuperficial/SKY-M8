@@ -95,9 +95,7 @@ class Welcome(commands.Cog):
         # 检查系统频道并发送欢迎消息
         if guild.system_channel:
             msg_cfg = await self.fetch_welcome_msg(guild.id)
-            builder = WelcomeMessageBuilder(
-                VarParser.from_member_join(self.bot, member)
-            )
+            builder = WelcomeMessageBuilder(VarParser.from_member_join(self.bot, member))
             msg_data = builder.build(msg_cfg)
             await guild.system_channel.send(**msg_data)
 
@@ -117,9 +115,7 @@ class Welcome(commands.Cog):
         }
         # 筛选选项并设置
         options = {k: v for k, v in options.items() if v is not None}
-        await remote_config.merge_json(
-            self._WELCOME_KEY, guild.id, "enable", value=options
-        )
+        await remote_config.merge_json(self._WELCOME_KEY, guild.id, "enable", value=options)
         # 获取当前选项并展示
         options = await remote_config.get_json(self._WELCOME_KEY, guild.id, "enable")
         await interaction.followup.send(
@@ -171,9 +167,7 @@ class Welcome(commands.Cog):
         if file:
             # 需要设置database频道以支持文件上传
             if not self._db_channel:
-                await interaction.followup.send(
-                    embed=fail("File uploading not available")
-                )
+                await interaction.followup.send(embed=fail("File uploading not available"))
                 return
             # 检查图片文件格式
             if not self._is_img_file_valid(file):
@@ -197,9 +191,7 @@ class Welcome(commands.Cog):
                 ).set_image(url=url)
             )
             # 保存图像url
-            await remote_config.set_json(
-                self._WELCOME_KEY, guild.id, "message", "image", value=url
-            )
+            await remote_config.set_json(self._WELCOME_KEY, guild.id, "message", "image", value=url)
         except discord.HTTPException as ex:
             if ex.status == 400:
                 # url格式错误
@@ -244,9 +236,7 @@ class Welcome(commands.Cog):
         # 获取消息配置
         msg_cfg = await self.fetch_welcome_msg(interaction.guild.id)  # type: ignore
         # 生成消息
-        builder = WelcomeMessageBuilder(
-            VarParser.from_interaction(interaction, user=member)
-        )
+        builder = WelcomeMessageBuilder(VarParser.from_interaction(interaction, user=member))
         msg_data = builder.build(msg_cfg)
         await interaction.followup.send(**msg_data)
 
@@ -337,6 +327,7 @@ class WelcomeMessageView(AutoDisableView):
         modal = LongTextModal(
             title="Set message content",
             label="Content",
+            description="Write your server's welcome message here",
             default=self.msg_cfg["content"],
         )
         await interaction.response.send_modal(modal)
@@ -362,6 +353,7 @@ class WelcomeMessageView(AutoDisableView):
         modal = ShortTextModal(
             title="Set border color",
             label="Color (Optional)",
+            description="Supported formats: HEX, #HEX, 0xHEX, rgb(RED, GREEN, BLUE)",
             default=self.msg_cfg["color"],
             required=False,
         )
@@ -413,7 +405,7 @@ class WelcomeMessageView(AutoDisableView):
         color_help = (
             "## Color How-to\n"
             "Click the **Color Picker** button, pick your color, and use the color value.\n"
-            "Supported color format:\n"
+            "Supported color formats:\n"
             "-# - `HEX`\n-# - `#HEX`\n-# - `0xHEX`\n-# - `rgb(RED, GREEN, BLUE)`"
         )
         var_help = await VarParser.get_help()

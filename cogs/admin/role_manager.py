@@ -147,6 +147,7 @@ class AutoRolesSetupView(AutoDisableView):
         modal = LongTextModal(
             title="Set Autoroles description",
             label="Description (Optional)",
+            description="Explain what are these roles related to, or what do they allow members to do",
             default=self.description,
             required=False,
         )
@@ -170,6 +171,7 @@ class AutoRolesSetupView(AutoDisableView):
         modal = ShortTextModal(
             title="Provide role description",
             label="Role Description",
+            description="Additional information about this role",
         )
         await interaction.response.send_modal(modal)
         await modal.wait()
@@ -184,6 +186,7 @@ class AutoRolesSetupView(AutoDisableView):
         modal = ShortTextModal(
             title="Provide role description",
             label="Role Description",
+            description="Additional information about this role",
             default=desc,
         )
         await interaction.response.send_modal(modal)
@@ -218,9 +221,7 @@ class AutoRolesSetupView(AutoDisableView):
 
 class AutoRolesView(ui.View):
     # 继承DynamicItem以在运行时动态添加按钮
-    class AutoRoleButton(
-        ui.DynamicItem[ui.Button], template=r"autoroles:(?P<role_id>[0-9]+)"
-    ):
+    class AutoRoleButton(ui.DynamicItem[ui.Button], template=r"autoroles:(?P<role_id>[0-9]+)"):
         def __init__(self, role_id: int, role_name: str = ""):
             super().__init__(
                 ui.Button(

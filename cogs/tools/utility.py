@@ -446,8 +446,8 @@ class MimicStickerMakerView(ui.LayoutView):
             modal = ShortTextModal(
                 title="Set Sticker Name",
                 label="Name",
+                description="Maximum length of name is 32",
                 default=self.label,
-                min_length=1,
                 max_length=32,
             )
             await interaction.response.send_modal(modal)
@@ -487,6 +487,7 @@ class MimicStickerMakerView(ui.LayoutView):
             modal = ShortTextModal(
                 title="Set Image Size",
                 label="Size",
+                description="Image size must be between 128 and 1024",
                 default=self.label,
                 min_length=3,
                 max_length=4,

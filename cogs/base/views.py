@@ -1,5 +1,5 @@
 from datetime import date, datetime, time
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import discord
@@ -38,60 +38,83 @@ class EmptyModal(ui.Modal):
 
 
 class ShortTextModal(EmptyModal):
-    text = ui.TextInput(label="Text")
+    label = ui.Label(text="Text", component=ui.TextInput(style=TextStyle.short))
 
     def __init__(
         self,
         *,
         title: str,
         label: str,
+        description: str | None = None,
         default: str | None = None,
         required: bool = True,
         min_length: int | None = None,
         max_length: int | None = None,
     ):
-        self.text.label = label
+        super().__init__(title=title)
+        self.text = cast(ui.TextInput, self.label.component)
+
+        self.label.text = label
+        self.label.description = description
         self.text.default = default
         self.text.required = required
         self.text.min_length = min_length
         self.text.max_length = max_length
-        super().__init__(title=title)
 
 
 class LongTextModal(EmptyModal):
-    text = ui.TextInput(label="Text")
+    label = ui.Label(text="Text", component=ui.TextInput(style=TextStyle.long))
 
     def __init__(
         self,
         *,
         title: str,
         label: str,
+        description: str | None = None,
         default: str | None = None,
         required: bool = True,
         min_length: int | None = None,
         max_length: int | None = None,
     ):
-        self.text.style = TextStyle.long
-        self.text.label = label
+        super().__init__(title=title)
+        self.text = cast(ui.TextInput, self.label.component)
+
+        self.label.text = label
+        self.label.description = description
         self.text.default = default
         self.text.required = required
         self.text.min_length = min_length
         self.text.max_length = max_length
-        super().__init__(title=title)
 
 
 class DateModal(ui.Modal, title="Set Date"):
-    text_year = ui.TextInput(label="Year (1~9999)", min_length=1, max_length=4)
-    text_month = ui.TextInput(label="Month (1~12)", min_length=1, max_length=2)
-    text_day = ui.TextInput(label="Day (1~31)", min_length=1, max_length=2)
+    label_year = ui.Label(
+        text="Year",
+        description="Between 1 and 9999",
+        component=ui.TextInput(max_length=4),
+    )
+    label_month = ui.Label(
+        text="Month",
+        description="Between 1 and 12",
+        component=ui.TextInput(max_length=2),
+    )
+    label_day = ui.Label(
+        text="Day",
+        description="Between 1 and 31",
+        component=ui.TextInput(max_length=2),
+    )
 
     def __init__(self, *, dt: datetime) -> None:
+        super().__init__()
+        self.text_year = cast(ui.TextInput, self.label_year.component)
+        self.text_month = cast(ui.TextInput, self.label_month.component)
+        self.text_day = cast(ui.TextInput, self.label_day.component)
+
         self.date = dt.date()
         self.valid = False
         self.text_year.default = str(dt.year)
         self.text_month.default = str(dt.month)
         self.text_day.default = str(dt.day)
-        super().__init__()
 
     @property
     def year(self):
@@ -122,17 +145,33 @@ class DateModal(ui.Modal, title="Set Date"):
 
 
 class TimeModal(ui.Modal, title="Set Time"):
-    text_hour = ui.TextInput(label="Hour (0~23 or 1~12AM/PM)", min_length=1, max_length=4)  # fmt: skip
-    text_minute = ui.TextInput(label="Minute (0~59)", min_length=1, max_length=2)
-    text_second = ui.TextInput(label="Second (0~59)", required=False, max_length=2)
+    label_hour = ui.Label(
+        text="Hour",
+        description="Between 0 and 23, or 1~12am/pm",
+        component=ui.TextInput(max_length=4),
+    )
+    label_minute = ui.Label(
+        text="Minute",
+        description="Between 0 and 59",
+        component=ui.TextInput(max_length=2),
+    )
+    label_second = ui.Label(
+        text="Second",
+        description="Between 0 and 59",
+        component=ui.TextInput(required=False, max_length=2),
+    )
 
     def __init__(self, *, dt: datetime) -> None:
+        super().__init__()
+        self.text_hour = cast(ui.TextInput, self.label_hour.component)
+        self.text_minute = cast(ui.TextInput, self.label_minute.component)
+        self.text_second = cast(ui.TextInput, self.label_second.component)
+
         self.time = dt.time()
         self.valid = False
         self.text_hour.default = str(dt.hour)
         self.text_minute.default = str(dt.minute)
         self.text_second.default = str(dt.second)
-        super().__init__()
 
     @property
     def hour(self):
@@ -150,7 +189,10 @@ class TimeModal(ui.Modal, title="Set Time"):
         try:
             return int(hour)  # 24小时制
         except ValueError:
-            return datetime.strptime(hour, "%I%p").hour  # 12小时制
+            try:
+                return datetime.strptime(hour, "%I%p").hour  # 12小时制
+            except ValueError:
+                return datetime.strptime(hour, "%I %p").hour  # 12小时制
 
     async def on_submit(self, interaction: Interaction):
         await interaction.response.defer()
@@ -169,12 +211,18 @@ class TimeModal(ui.Modal, title="Set Time"):
 
 
 class TimeZoneModal(ui.Modal, title="Set Time Zone"):
-    text_tz = ui.TextInput(label="Time Zone")
+    label_tz = ui.Label(
+        text="Time Zone",
+        description="Enter IANA time zone identifier, or try to match a time zone by entering a country or city name",
+        component=ui.TextInput(),
+    )
 
     def __init__(self, *, dt: datetime):
+        super().__init__()
+        self.text_tz = cast(ui.TextInput, self.label_tz.component)
+
         self.timezone = dt.tzinfo
         self.valid = False
-        super().__init__()
 
     async def on_submit(self, interaction: Interaction):
         await interaction.response.defer()
