@@ -610,16 +610,27 @@ class MimicStickerMakerView(ui.LayoutView):
             await interaction.response.defer()
             user = interaction.user
             guild = interaction.guild
+            assert isinstance(user, discord.Member)
             assert guild is not None
             assert self.view is not None
 
             # 检查权限
-            perm = guild.me.guild_permissions
-            if not (perm.create_expressions and perm.manage_expressions):
+            perm_me = guild.me.guild_permissions
+            if not (perm_me.create_expressions and perm_me.manage_expressions):
                 await interaction.followup.send(
                     embed=fail(
                         "Missing Permission",
                         f"Please add `Create Expressions` and `Manage Expressions` permission for {guild.me.mention} first.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            perm_user = user.guild_permissions
+            if not (perm_user.create_expressions and perm_user.manage_expressions):
+                await interaction.followup.send(
+                    embed=fail(
+                        "Missing Permission",
+                        "You don't have `Create Expressions` and `Manage Expressions` permission in this server.",
                     ),
                     ephemeral=True,
                 )
