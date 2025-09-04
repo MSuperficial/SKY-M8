@@ -46,12 +46,8 @@ async def main():
             await bot.start(token)
         except discord.HTTPException as e:
             if e.status == 429:
-                print(
-                    "The Discord servers denied the connection for making too many requests"
-                )
-                print(
-                    "Get help from https://stackoverflow.com/questions/66724687/in-discord-py-how-to-solve-the-error-for-toomanyrequests"
-                )
+                print("The Discord servers denied the connection for making too many requests")
+                print("Get help from https://stackoverflow.com/questions/66724687/in-discord-py-how-to-solve-the-error-for-toomanyrequests")  # fmt:skip
             else:
                 raise e
 
