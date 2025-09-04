@@ -2,7 +2,7 @@ import calendar
 import json
 import re
 from datetime import datetime, timedelta
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 import discord
 from discord import ButtonStyle, Interaction, app_commands, ui
@@ -249,7 +249,7 @@ class ShardCalendar(
         day="The day of month (1~31), by default today.",
         month="The month (1~12), by default current month.",
         year="The year (1~9999), by default current year.",
-        author="Change your name for credit, optional.",
+        author="Use this name for credit, optional.",
     )
     async def shard_record(
         self,
@@ -260,7 +260,7 @@ class ShardCalendar(
         year: app_commands.Transform[int, YearTransformer] | None = None,
         author: str = "",
     ):
-        date = sky_time_now()
+        date = now = sky_time_now()
         day, month, year = day or date.day, month or date.month, year or date.year
         try:
             date = sky_datetime(year, month, day)
@@ -297,8 +297,9 @@ class ShardCalendar(
             # 其他错误
             await interaction.followup.send(embed=fail("Error while recording", ex))
             return
-        # 记录回忆后更新所有live消息
-        await self.update_live_msg()
+        # 如果记录的是今天的回忆，则更新所有live消息
+        if date.date() == now.date():
+            await self.update_live_msg()
 
     async def get_ready_for_live(self):
         # 设置更新时间
@@ -338,7 +339,7 @@ class ShardView(ui.LayoutView):
             container.add_item(
                 ui.Section(
                     ui.TextDisplay(f"-# Shard Calendar - {self._date_field()}"),
-                    accessory=self._create_button("today", "Today", config),  # type: ignore
+                    accessory=self._create_nav_button("today", "Today", config),  # type: ignore
                 )
             )
         else:
@@ -365,8 +366,8 @@ class ShardView(ui.LayoutView):
         # 导航按钮
         container.add_item(
             ui.ActionRow(
-                self._create_button(info.date - timedelta(days=1), "◀", config),  # type: ignore
-                self._create_button(info.date + timedelta(days=1), "▶", config),  # type: ignore
+                self._create_nav_button(info.date - timedelta(days=1), "◀", config),  # type: ignore
+                self._create_nav_button(info.date + timedelta(days=1), "▶", config),  # type: ignore
             )
         )
         self.add_item(container)
@@ -454,7 +455,14 @@ class ShardView(ui.LayoutView):
         emojis = config["emojis"]
         title = f"**{emojis['Memory']} __Memory__**"
         if not (self.extra and self.extra.has_memory):
-            container.add_item(ui.TextDisplay(f"{title}\n{emojis['blank']} *Unknown yet*"))
+            container.remove_item(text_map)
+            container.add_item(
+                ui.Section(
+                    text_map,
+                    ui.TextDisplay(f"{title}\n{emojis['blank']} *Unknown yet*"),
+                    accessory=self._create_record_button(self.info.date),  # type: ignore
+                )
+            )
         else:
             memory = self.extra.memory_type
             memory_url = config["infographics"].get(f"memory.{memory.value}")
@@ -480,7 +488,7 @@ class ShardView(ui.LayoutView):
                     )
                 )
 
-    def _create_button(self, dt, label, config: _ShardCfg):
+    def _create_nav_button(self, dt, label, config: _ShardCfg):
         emojis = config["emojis"]
         now = self.created_at
         info = get_shard_info(now if dt == "today" else dt)
@@ -497,6 +505,9 @@ class ShardView(ui.LayoutView):
             disabled=is_today,
             send_new=self.persistent,
         )
+
+    def _create_record_button(self, dt: datetime):
+        return ShardRecordButton(dt)
 
 
 class ShardNavButton(
@@ -550,6 +561,86 @@ class ShardNavButton(
             await interaction.followup.send(view=view, ephemeral=True)
         else:
             await interaction.edit_original_response(view=view)
+
+
+class ShardRecordButton(
+    ui.DynamicItem[ui.Button],
+    template=r"shard-record:(?P<date>[0-9]{8}|today)",
+):
+    def __init__(self, date: datetime):
+        super().__init__(
+            ui.Button(
+                style=ButtonStyle.secondary,
+                label="Record",
+                emoji="📥",
+                custom_id=f"shard-record:{date:%Y%m%d}",
+            ),
+        )
+        self.date = date
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match: re.Match[str]):
+        date_str = match["date"]
+        date = datetime.strptime(date_str, "%Y%m%d")
+        date = sky_datetime(date.year, date.month, date.day)
+        return cls(date)
+
+    async def callback(self, interaction: Interaction[SkyM8]):  # type: ignore
+        modal = ShardRecordModal(self.date)
+        await interaction.response.send_modal(modal)
+        await modal.wait()
+        if not modal.recorded:
+            return
+        # 更新当前消息
+        info = get_shard_info(self.date)
+        extra = await ShardCalendar.get_extra_info(self.date)
+        view = ShardView(info, extra, shard_cfg, interaction.client)
+        await interaction.edit_original_response(view=view)
+        # 如果记录的是今天的回忆，则同时更新所有live消息
+        if self.date.date() == sky_time_now().date():
+            bot = interaction.client
+            cog = cast(ShardCalendar, bot.cogs[ShardCalendar.__cog_name__])
+            await cog.update_live_msg()
+
+
+class ShardRecordModal(ui.Modal, title="Record Shard Info"):
+    label_memory = ui.Label(
+        text="Memory Scene",
+        description="The memory scene you can enter after completing red shard",
+        component=ui.Select(
+            options=[discord.SelectOption(label=m.name, value=m.name) for m in MemoryType]
+        ),
+    )
+    label_author = ui.Label(
+        text="Author (Optional)",
+        description="Use this name for credit",
+        component=ui.TextInput(required=False),
+    )
+
+    def __init__(self, date: datetime):
+        super().__init__()
+        self.select_memory = cast(ui.Select, self.label_memory.component)
+        self.text_author = cast(ui.TextInput, self.label_author.component)
+
+        self.date = date
+        self.recorded = False
+
+    async def on_submit(self, interaction: Interaction):
+        await interaction.response.defer()
+        memory = MemoryType[self.select_memory.values[0]]
+        author = self.text_author.value
+        try:
+            extra = ShardExtra(
+                has_memory=True,
+                memory_type=memory,
+                memory_user=interaction.user.id,
+                memory_by=author.strip(),
+                memory_timestamp=interaction.created_at.timestamp(),
+            )
+            await ShardCalendar.set_extra_info(self.date, extra)
+            self.recorded = True
+        except Exception as ex:
+            await interaction.followup.send(embed=fail("Error while recording", ex))
 
 
 async def setup(bot: SkyM8):
