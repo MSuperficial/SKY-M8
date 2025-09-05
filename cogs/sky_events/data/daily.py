@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from cogs.emoji_manager import Emojis
 from utils.remote_config import remote_config
@@ -9,7 +9,7 @@ from .shard import get_shard_info
 
 __all__ = (
     "DailyEventData",
-    "fetch_displayed_events",
+    "fetch_displayed_event_groups",
     "fetch_all_event_data",
     "filter_events",
     "get_daily_event_time",
@@ -18,14 +18,29 @@ __all__ = (
 
 _EVENTS_KEY = "dailyClock.events"
 
-_default_events = [
-    "geyser",
-    "peakshard",
-    "grandma",
-    "turtle",
-    "aurora",
-    "firework",
-    "dailyreset",
+
+class EventGroup(TypedDict):
+    name: str
+    displayName: bool
+    events: list[str]
+
+
+_default_event_groups = [
+    EventGroup(
+        name="Wax",
+        displayName=False,
+        events=["geyser", "grandma", "turtle"],
+    ),
+    EventGroup(
+        name="Sky Fest",
+        displayName=False,
+        events=["aurora", "firework"],
+    ),
+    EventGroup(
+        name="Reset",
+        displayName=False,
+        events=["dailyreset"],
+    ),
 ]
 
 
@@ -72,7 +87,7 @@ _daily_event_data = {
         name=f"{Emojis('season_aurora', '🎶')} Aurora Concert",
         offset=10,
         duration=48,
-        period=240,
+        period=120,
     ),
     "firework": DailyEventData(
         id="firework",
@@ -92,12 +107,12 @@ _daily_event_data = {
 }
 
 
-async def fetch_displayed_events():
-    events: list[str] = _default_events
+async def fetch_displayed_event_groups():
+    groups: list[EventGroup] = _default_event_groups
     value = await remote_config.get_field(_EVENTS_KEY, "displayedEvents")
     if value:
-        events = json.loads(value)
-    return events
+        groups = json.loads(value)
+    return groups
 
 
 async def fetch_all_event_data():
@@ -114,20 +129,39 @@ async def fetch_all_event_data():
     return data
 
 
-def filter_events(event_data: list[DailyEventData], date: datetime):
-    def available(e: DailyEventData):
+def filter_events(
+    groups: list[EventGroup],
+    data: dict[str, DailyEventData],
+    date: datetime,
+):
+    def available(e: str):
+        if e not in data:
+            return False
+        d = data[e]
         # 判断是否在设定的日期内
-        if e.days_of_month is not None and date.day not in e.days_of_month:
+        if d.days_of_month is not None and date.day not in d.days_of_month:
             return False
         # 如果今天没有Peaks Shard或其不提供烛火，则无需显示其信息
-        if e.id == "peakshard":
+        if d.id == "peakshard":
             shard_info = get_shard_info(date)
             if not (shard_info.has_shard and shard_info.extra_shard):
                 return False
         return True
 
-    events = [e for e in event_data if available(e)]
-    return events
+    filtered_groups: list[EventGroup] = []
+    for g in groups:
+        # 筛选可用事件
+        events = [e for e in g["events"] if available(e)]
+        # 如果分组筛选后已经没有事件就跳过该分组
+        if len(events) > 0:
+            filtered_groups.append(
+                EventGroup(
+                    name=g["name"],
+                    displayName=g["displayName"],
+                    events=events,
+                )
+            )
+    return filtered_groups
 
 
 def get_daily_event_time(now: datetime, event_data: DailyEventData):
@@ -139,13 +173,9 @@ def get_daily_event_time(now: datetime, event_data: DailyEventData):
     # 如果当前事件正在进行，计算当前事件结束的时间
     current_end_time = None
     if minutes_from_last < event_data.duration:
-        current_end_time = now_time + timedelta(
-            minutes=event_data.duration - minutes_from_last
-        )
+        current_end_time = now_time + timedelta(minutes=event_data.duration - minutes_from_last)
     # 计算下次事件开始的时间
-    next_begin_time = now_time + timedelta(
-        minutes=event_data.period - minutes_from_last
-    )
+    next_begin_time = now_time + timedelta(minutes=event_data.period - minutes_from_last)
     # 根据条件判断是否有下次事件
     days_of_month = event_data.days_of_month
     if days_of_month is not None and next_begin_time.day not in days_of_month:
