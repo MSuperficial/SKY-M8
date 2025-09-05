@@ -8,15 +8,15 @@ from utils.remote_config import remote_config
 from .shard import get_shard_info
 
 __all__ = (
-    "DailyEventData",
+    "ClockEventData",
     "fetch_displayed_event_groups",
     "fetch_all_event_data",
     "filter_events",
-    "get_daily_event_time",
+    "get_clock_event_time",
 )
 
 
-_EVENTS_KEY = "dailyClock.events"
+_EVENTS_KEY = "skyClock.events"
 
 
 class EventGroup(TypedDict):
@@ -44,7 +44,7 @@ _default_event_groups = [
 ]
 
 
-class DailyEventData(NamedTuple):
+class ClockEventData(NamedTuple):
     id: str
     name: str
     offset: int
@@ -53,43 +53,43 @@ class DailyEventData(NamedTuple):
     days_of_month: list[int] | None = None
 
 
-_daily_event_data = {
-    "geyser": DailyEventData(
+_clock_event_data = {
+    "geyser": ClockEventData(
         id="geyser",
         name="⛲ Geyser",
         offset=5,
         duration=10,
         period=120,
     ),
-    "peakshard": DailyEventData(
+    "peakshard": ClockEventData(
         id="peakshard",
         name="🏔️ Peaks Shard",
         offset=8,
         duration=22,
         period=30,
     ),
-    "grandma": DailyEventData(
+    "grandma": ClockEventData(
         id="grandma",
         name="🍞 Grandma",
         offset=35,
         duration=10,
         period=120,
     ),
-    "turtle": DailyEventData(
+    "turtle": ClockEventData(
         id="turtle",
         name="🐢 Turtle",
         offset=50,
         duration=10,
         period=120,
     ),
-    "aurora": DailyEventData(
+    "aurora": ClockEventData(
         id="aurora",
         name=f"{Emojis('season_aurora', '🎶')} Aurora Concert",
         offset=10,
         duration=48,
         period=120,
     ),
-    "firework": DailyEventData(
+    "firework": ClockEventData(
         id="firework",
         name="🎆 Aviary Firework",
         offset=10,
@@ -97,7 +97,7 @@ _daily_event_data = {
         period=240,
         days_of_month=[1],
     ),
-    "dailyreset": DailyEventData(
+    "dailyreset": ClockEventData(
         id="dailyreset",
         name="⏱️ Daily Reset",
         offset=0,
@@ -116,7 +116,7 @@ async def fetch_displayed_event_groups():
 
 
 async def fetch_all_event_data():
-    data = _daily_event_data.copy()
+    data = _clock_event_data.copy()
     overrides: dict[str, dict] = {}
     value = await remote_config.get_field(_EVENTS_KEY, "eventDataOverrides")
     if value:
@@ -125,13 +125,13 @@ async def fetch_all_event_data():
         if k in data:
             data[k] = data[k]._replace(**v)
         else:
-            data[k] = DailyEventData(**v)
+            data[k] = ClockEventData(**v)
     return data
 
 
 def filter_events(
     groups: list[EventGroup],
-    data: dict[str, DailyEventData],
+    data: dict[str, ClockEventData],
     date: datetime,
 ):
     def available(e: str):
@@ -164,7 +164,7 @@ def filter_events(
     return filtered_groups
 
 
-def get_daily_event_time(now: datetime, event_data: DailyEventData):
+def get_clock_event_time(now: datetime, event_data: ClockEventData):
     # 计算自今天开始经过的分钟数
     now_time = now.replace(second=0, microsecond=0)
     minutes_passed = now_time.hour * 60 + now_time.minute

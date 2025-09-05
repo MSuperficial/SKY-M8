@@ -12,21 +12,21 @@ from sky_m8 import SkyM8
 
 from ..base.live_update import LiveUpdateCog
 from ..helper.times import sky_time_now
-from .data.daily import (
-    DailyEventData,
+from .data.clock import (
+    ClockEventData,
     EventGroup,
     fetch_all_event_data,
     fetch_displayed_event_groups,
     filter_events,
-    get_daily_event_time,
+    get_clock_event_time,
 )
 
-__all__ = ("DailyClock",)
+__all__ = ("SkyClock",)
 
 
-class DailyClock(
+class SkyClock(
     LiveUpdateCog,
-    live_key="dailyClock.webhooks",
+    live_key="skyClock.webhooks",
     group_live_name="skyclock-live",
     live_display_name="Sky Clock",
     live_update_interval={"minutes": 1},
@@ -71,7 +71,7 @@ class SkyClockView(ui.LayoutView):
         *,
         dt: datetime,
         groups: list[EventGroup],
-        data: dict[str, DailyEventData],
+        data: dict[str, ClockEventData],
     ):
         super().__init__(timeout=None)
         self.dt = dt
@@ -90,7 +90,7 @@ class SkyClockView(ui.LayoutView):
         )
         self.add_item(container)
 
-    def _comp_group(self, group: EventGroup, data: dict[str, DailyEventData]):
+    def _comp_group(self, group: EventGroup, data: dict[str, ClockEventData]):
         comps: list[ui.Item] = []
         if group["displayName"] and group["name"]:
             comps.append(ui.TextDisplay(f"### {group['name']}"))
@@ -99,8 +99,8 @@ class SkyClockView(ui.LayoutView):
             comps.append(self._comp_event(data[e]))
         return comps
 
-    def _comp_event(self, event_data: DailyEventData) -> ui.Item:
-        current_end, next_begin = get_daily_event_time(self.dt, event_data)
+    def _comp_event(self, event_data: ClockEventData) -> ui.Item:
+        current_end, next_begin = get_clock_event_time(self.dt, event_data)
         # 事件名称
         text = f"**{event_data.name}**\n"
         # 当前事件结束时间
@@ -117,4 +117,4 @@ class SkyClockView(ui.LayoutView):
 
 
 async def setup(bot: SkyM8):
-    await bot.add_cog(DailyClock(bot))
+    await bot.add_cog(SkyClock(bot))
