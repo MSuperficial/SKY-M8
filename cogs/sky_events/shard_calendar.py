@@ -154,12 +154,11 @@ class ShardCalendar(
         times = [t.timetz() for st in info.occurrences for t in st[1:]]
         self.update_live_msg.change_interval(time=times)
 
-    async def get_live_message_data(
+    async def get_shard_message_data(
         self,
         *,
         date: datetime = MISSING,
         persistent: bool = True,
-        **kwargs,
     ) -> dict[str, Any]:
         date = date or sky_time_now()
         info = get_shard_info(date)
@@ -174,6 +173,9 @@ class ShardCalendar(
             persistent=persistent,
         )
         return {"view": view}
+
+    async def get_live_message_data(self, **kwargs) -> dict[str, Any]:
+        return await self.get_shard_message_data(**kwargs)
 
     @commands.is_owner()
     @commands.group(name="shard", invoke_without_command=True)
@@ -192,7 +194,7 @@ class ShardCalendar(
     )
     async def shards(self, interaction: Interaction, private: bool = True):
         await interaction.response.defer(ephemeral=private)
-        msg_data = await self.get_live_message_data(persistent=False)
+        msg_data = await self.get_shard_message_data(persistent=False)
         await interaction.followup.send(**msg_data)
 
     @group_shard.command(name="date", description="View shards info of specific date.")
@@ -223,7 +225,7 @@ class ShardCalendar(
             )
             return
         await interaction.response.defer(ephemeral=private)
-        msg_data = await self.get_live_message_data(date=date, persistent=False)
+        msg_data = await self.get_shard_message_data(date=date, persistent=False)
         await interaction.followup.send(**msg_data)
 
     @group_shard.command(name="offset", description="View shards info relative to today.")  # fmt: skip
@@ -240,7 +242,7 @@ class ShardCalendar(
         await interaction.response.defer(ephemeral=private)
         now = sky_time_now()
         date = now + timedelta(days=days)
-        msg_data = await self.get_live_message_data(date=date, persistent=False)
+        msg_data = await self.get_shard_message_data(date=date, persistent=False)
         await interaction.followup.send(**msg_data)
 
     @group_shard.command(name="record", description="Record shards info of a specific date.")  # fmt: skip
@@ -507,7 +509,7 @@ class ShardView(ui.LayoutView):
         )
 
     def _create_record_button(self, dt: datetime):
-        return ShardRecordButton(dt)
+        return ShardRecordButton(date=dt, persistent=self.persistent)
 
 
 class ShardNavButton(
@@ -552,38 +554,39 @@ class ShardNavButton(
             date = self.date
         else:
             date = sky_time_now()
-        info = get_shard_info(date)
-        extra = await ShardCalendar.get_extra_info(date)
-        view = ShardView(info, extra, shard_cfg, interaction.client)
+        bot = interaction.client
+        cog = cast(ShardCalendar, bot.cogs[ShardCalendar.__cog_name__])
+        msg_data = await cog.get_shard_message_data(date=date, persistent=False)
         # 如果是持久化的按钮，则新发送一条消息，否则编辑原消息
         # 目前持久化的按钮在实时更新的消息中使用，其消息由task负责更新，因此不应该在这里编辑
         if self.send_new:
-            await interaction.followup.send(view=view, ephemeral=True)
+            await interaction.followup.send(**msg_data, ephemeral=True)
         else:
-            await interaction.edit_original_response(view=view)
+            await interaction.edit_original_response(**msg_data)
 
 
 class ShardRecordButton(
     ui.DynamicItem[ui.Button],
-    template=r"shard-record:(?P<date>[0-9]{8}|today)",
+    template=r"shard-record:(?P<date>[0-9]{8}|today),(?P<persistent>[01])",
 ):
-    def __init__(self, date: datetime):
+    def __init__(self, *, date: datetime, persistent: bool):
         super().__init__(
             ui.Button(
                 style=ButtonStyle.secondary,
                 label="Record",
                 emoji="📥",
-                custom_id=f"shard-record:{date:%Y%m%d}",
+                custom_id=f"shard-record:{date:%Y%m%d},{int(persistent)}",
             ),
         )
         self.date = date
+        self.persistent = persistent
 
     @classmethod
     async def from_custom_id(cls, interaction, item, match: re.Match[str]):
         date_str = match["date"]
         date = datetime.strptime(date_str, "%Y%m%d")
         date = sky_datetime(date.year, date.month, date.day)
-        return cls(date)
+        return cls(date=date, persistent=bool(int(match["persistent"])))
 
     async def callback(self, interaction: Interaction[SkyM8]):  # type: ignore
         modal = ShardRecordModal(self.date)
@@ -591,15 +594,13 @@ class ShardRecordButton(
         await modal.wait()
         if not modal.recorded:
             return
+        bot = interaction.client
+        cog = cast(ShardCalendar, bot.cogs[ShardCalendar.__cog_name__])
+        msg_data = await cog.get_shard_message_data(date=self.date, persistent=self.persistent)
         # 更新当前消息
-        info = get_shard_info(self.date)
-        extra = await ShardCalendar.get_extra_info(self.date)
-        view = ShardView(info, extra, shard_cfg, interaction.client)
-        await interaction.edit_original_response(view=view)
+        await interaction.edit_original_response(**msg_data)
         # 如果记录的是今天的回忆，则同时更新所有live消息
         if self.date.date() == sky_time_now().date():
-            bot = interaction.client
-            cog = cast(ShardCalendar, bot.cogs[ShardCalendar.__cog_name__])
             await cog.update_live_msg()
 
 
