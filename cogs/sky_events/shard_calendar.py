@@ -567,7 +567,7 @@ class ShardNavButton(
 
 class ShardRecordButton(
     ui.DynamicItem[ui.Button],
-    template=r"shard-record:(?P<date>[0-9]{8}|today),(?P<persistent>[01])",
+    template=r"shard-record:(?P<date>[0-9]{8}),(?P<persistent>[01])",
 ):
     def __init__(self, *, date: datetime, persistent: bool):
         super().__init__(
@@ -646,4 +646,5 @@ class ShardRecordModal(ui.Modal, title="Record Shard Info"):
 
 async def setup(bot: SkyM8):
     bot.add_dynamic_items(ShardNavButton)
+    bot.add_dynamic_items(ShardRecordButton)
     await bot.add_cog(ShardCalendar(bot))
