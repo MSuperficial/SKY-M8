@@ -789,6 +789,7 @@ class MimicStickerMakerView(ui.LayoutView):
         return {
             "view": self,
             "attachments": [file],
+            "allowed_mentions": discord.AllowedMentions.none(),
         }
 
     def create_display_message(self) -> dict[str, Any]:
@@ -797,11 +798,8 @@ class MimicStickerMakerView(ui.LayoutView):
         else:
             color = None
 
-        embed = discord.Embed(
-            color=color,
-            title="Mimic Sticker",
-        )
-        embed.set_thumbnail(url=self.author.display_avatar.url)
+        embed = discord.Embed(color=color)
+        embed.set_author(name="Mimic Sticker", icon_url=self.author.display_avatar.url)
         embed.add_field(
             name="Made By",
             value=f"> {self.author.mention}",
@@ -819,4 +817,5 @@ class MimicStickerMakerView(ui.LayoutView):
         return {
             "embed": embed,
             "file": file,
+            "allowed_mentions": discord.AllowedMentions.none(),
         }
