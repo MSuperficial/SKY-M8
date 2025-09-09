@@ -95,7 +95,7 @@ def get_shard_config():
 class ShardCalendar(
     LiveUpdateCog,
     live_key="shardCalendar.webhooks",
-    group_live_name="shard-live",
+    group_live_name="live-shard",
     live_display_name="Shard Calendar",
 ):
     _CONFIG_KEY = "shardCalendar.config"

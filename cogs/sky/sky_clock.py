@@ -27,7 +27,7 @@ __all__ = ("SkyClock",)
 class SkyClock(
     LiveUpdateCog,
     live_key="skyClock.webhooks",
-    group_live_name="skyclock-live",
+    group_live_name="live-skyclock",
     live_display_name="Sky Clock",
     live_update_interval={"minutes": 1},
 ):

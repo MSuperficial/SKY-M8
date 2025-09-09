@@ -18,7 +18,7 @@ from .sky_clock import SkyClock
 class DailyGuides(
     LiveUpdateCog,
     live_key="dailyGuides.webhooks",
-    group_live_name="dailyguides-live",
+    group_live_name="live-dailyguides",
     live_display_name="Daily Guides",
     live_update_interval={"time": sky_time(0, 0, 0)},
 ):
