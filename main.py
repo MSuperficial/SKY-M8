@@ -30,7 +30,9 @@ async def main():
         "info",
         "tools",
         "admin",
-        "sky_events",
+        "sky.sky_clock",
+        "sky.shard_calendar",
+        "sky.daily_guides",
     ]
 
     bot = SkyM8(
