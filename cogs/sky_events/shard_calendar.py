@@ -55,6 +55,7 @@ _default_shard_cfg = _ShardCfg(
         "Next": "⤵️",
         "Memory": "💠",
         "Crystal": "💠",
+        "blank": "▸",
     },
     infographics={},
     translations={
@@ -122,7 +123,7 @@ class ShardCalendar(
 
         emoji_mapping = config.get("emojis", {})
         emoji_override = {k: Emojis(str(v), str(v)) for k, v in emoji_mapping.items()}
-        emojis = Emojis.emojis | _default_shard_cfg["emojis"] | emoji_override
+        emojis = _default_shard_cfg["emojis"] | Emojis.emojis | emoji_override
         config["emojis"] = emojis
 
         config.setdefault("coming_days", _default_shard_cfg["coming_days"])
