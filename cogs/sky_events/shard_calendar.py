@@ -88,6 +88,10 @@ _default_shard_cfg = _ShardCfg(
 )
 
 
+def get_shard_config():
+    return shard_cfg.copy()
+
+
 class ShardCalendar(
     LiveUpdateCog,
     live_key="shardCalendar.webhooks",
@@ -341,12 +345,12 @@ class ShardView(ui.LayoutView):
         if show_today:
             container.add_item(
                 ui.Section(
-                    ui.TextDisplay(f"-# Shard Calendar - {self._date_field()}"),
+                    ui.TextDisplay(f"**Shard Calendar** - {self._date_field()}"),
                     accessory=self._create_nav_button("today", "Today", config),  # type: ignore
                 )
             )
         else:
-            container.add_item(ui.TextDisplay(f"-# Shard Calendar - {self._date_field()}"))
+            container.add_item(ui.TextDisplay(f"**Shard Calendar** - {self._date_field()}"))
         # 碎石事件类型
         container.add_item(ui.TextDisplay(f"## {self._type_field(config)}"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.large))
