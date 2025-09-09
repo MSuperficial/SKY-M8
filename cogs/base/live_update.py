@@ -81,7 +81,6 @@ class LiveUpdateCog(commands.Cog):
         self._live_lock = asyncio.Lock()
 
     async def cog_load(self):
-        self.live_webhooks = await self.refresh_live_webhooks()
         self.update_live_msg.start()
 
     async def cog_unload(self):
@@ -245,9 +244,7 @@ class LiveUpdateCog(commands.Cog):
                     # 通过channel删除消息，避免webhook已被删掉的情况
                     await lw.message.channel.delete_messages([lw.message])  # type: ignore
                     with suppress(discord.NotFound):
-                        await lw.webhook.delete(
-                            reason=f"Removed by {user.name}:{user.id}."
-                        )
+                        await lw.webhook.delete(reason=f"Removed by {user.name}:{user.id}.")
                     self.live_webhooks.remove(lw)
                     data = [w.to_dict() for w in self.live_webhooks]
                     await remote_config.set_list(self._WEBHOOKS_KEY, data)
@@ -255,9 +252,7 @@ class LiveUpdateCog(commands.Cog):
                         f"[{sky_time_now()}] {self._DISPLAY_NAME} live message removed by {user.name}:{user.id}.\n"
                         f"{lw.message.jump_url}."
                     )
-            await followup.edit(
-                embed=success(f"{self._DISPLAY_NAME} live message removed")
-            )
+            await followup.edit(embed=success(f"{self._DISPLAY_NAME} live message removed"))
         except Exception as ex:
             await followup.edit(embed=fail("Error", ex))
 
@@ -332,6 +327,8 @@ class LiveUpdateCog(commands.Cog):
     async def _task_live_before(self):
         # 等待客户端就绪
         await self.bot.wait_until_ready()
+        # 客户端就绪后再刷新webhook，否则一些属性（channel，guild）可能fetch不到
+        self.live_webhooks = await self.refresh_live_webhooks()
         # 先更新一次
         await self.update_live_msg()
         # 准备就绪
@@ -340,8 +337,7 @@ class LiveUpdateCog(commands.Cog):
     async def _task_live_error(self, error):
         task_name = self.update_live_msg._name
         error_msg = (
-            f"Error during task `{task_name}`: `{type(error).__name__}`\n"
-            f"{code_block(error)}"
+            f"Error during task `{task_name}`: `{type(error).__name__}`\n{code_block(error)}"
         )
         print(error_msg)
         await self.bot.owner.send(error_msg)
@@ -361,6 +357,8 @@ class LiveUpdateWebhook(NamedTuple):
         )
         webhook.proxy = os.getenv("PROXY")
         try:
+            # webhook和message都fetch，确保拿到guild信息
+            webhook = await webhook.fetch()
             message = await webhook.fetch_message(int(data["messageId"]))
         except discord.NotFound as ex:
             if ex.code == 10015:  # webhook已不存在
