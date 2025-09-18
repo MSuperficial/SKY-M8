@@ -436,9 +436,9 @@ class WelcomeMessageView(AutoDisableView):
 
 
 class WelcomeRolesView(AutoDisableView):
-    def __init__(self, *, default_roles: list[discord.Role] = []):
+    def __init__(self, *, default_roles: list[discord.Role] | None = None):
         super().__init__(timeout=300)
-        self.select_roles.default_values = default_roles
+        self.select_roles.default_values = [] if default_roles is None else default_roles
 
     @ui.select(
         cls=ui.RoleSelect,
