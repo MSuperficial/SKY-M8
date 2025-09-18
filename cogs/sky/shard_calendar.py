@@ -333,7 +333,7 @@ class ShardView(ui.LayoutView):
         persistent: bool = False,
     ) -> None:
         # persistent 除了影响UI是否持久化，还会影响按钮交互的回复方式
-        super().__init__(timeout=None if persistent else 840)
+        super().__init__(timeout=None if persistent else 900)
         self.info = info
         self.extra = extra
         self.show_today = show_today

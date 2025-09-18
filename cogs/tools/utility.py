@@ -199,7 +199,7 @@ class Utility(commands.Cog):
                 await interaction.followup.send(embed=fail("Invalid url", ex))
                 return
 
-        pending_view = ui.LayoutView(timeout=None)
+        pending_view = ui.LayoutView()
         pending_view.add_item(
             ui.Container(
                 ui.TextDisplay("### ⏳ Converting image..."),
@@ -704,7 +704,7 @@ class MimicStickerMakerView(ui.LayoutView):
         sticker_name: str,
         author: AppUser,
     ):
-        super().__init__(timeout=None)
+        super().__init__(timeout=900)
         self.image = image
         self.maker = maker
         self.buffer = io.BytesIO()

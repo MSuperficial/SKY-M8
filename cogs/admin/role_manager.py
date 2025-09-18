@@ -62,7 +62,7 @@ class AutoRolesSetupView(ui.LayoutView):
         roles: list[tuple[discord.Role, str]] = [],
         existing_msg: discord.Message | None = None,
     ):
-        super().__init__(timeout=None)
+        super().__init__(timeout=900)
         self.roles = roles
         self._existing_msg = existing_msg
 

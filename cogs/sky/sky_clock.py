@@ -5,7 +5,6 @@ from typing import Any, cast
 import discord
 from discord import ui
 from discord.ext import commands
-from discord.utils import MISSING
 from discord.utils import format_dt as timestamp
 
 from sky_m8 import SkyM8
@@ -34,12 +33,22 @@ class SkyClock(
     def __init__(self, bot: SkyM8):
         super().__init__(bot)
 
-    async def get_clock_message_data(self, *, when: datetime = MISSING) -> dict[str, Any]:
+    async def get_clock_message_data(
+        self,
+        *,
+        when: datetime | None = None,
+        persistent: bool = True,
+    ) -> dict[str, Any]:
         when = when or sky_time_now()
         groups = await fetch_displayed_event_groups()
         data = await fetch_all_event_data()
         available_groups = filter_events(groups, data, when)
-        view = SkyClockView(dt=when, groups=available_groups, data=data)
+        view = SkyClockView(
+            dt=when,
+            groups=available_groups,
+            data=data,
+            persistent=persistent,
+        )
         return {"view": view}
 
     async def get_live_message_data(self, **kwargs) -> dict[str, Any]:
@@ -54,7 +63,7 @@ class SkyClock(
     async def skyclock(self, ctx: commands.Context, offset: int = 0):
         now = sky_time_now()
         date = now + timedelta(days=offset)
-        msg_data = await self.get_clock_message_data(when=date)
+        msg_data = await self.get_clock_message_data(when=date, persistent=False)
         await ctx.send(**msg_data)
 
     async def get_ready_for_live(self):
@@ -72,8 +81,9 @@ class SkyClockView(ui.LayoutView):
         dt: datetime,
         groups: list[EventGroup],
         data: dict[str, ClockEventData],
+        persistent: bool = False,
     ):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None if persistent else 900)
         self.dt = dt
         self._plain_content = ""
 

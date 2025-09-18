@@ -25,9 +25,14 @@ class DailyGuides(
     def __init__(self, bot: SkyM8):
         super().__init__(bot)
 
-    def get_guides_message_data(self, date: datetime | None = None) -> dict[str, Any]:
+    def get_guides_message_data(
+        self,
+        date: datetime | None = None,
+        *,
+        persistent: bool = True,
+    ) -> dict[str, Any]:
         date = date or sky_time_now()
-        view = DailyGuidesView(date)
+        view = DailyGuidesView(date, persistent=persistent)
         return {"view": view}
 
     async def get_live_message_data(self, **kwargs) -> dict[str, Any]:
@@ -36,13 +41,13 @@ class DailyGuides(
     @app_commands.command(name="dailyguides", description="View various guides today in Sky.")
     async def daily_guides(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
-        msg_data = self.get_guides_message_data()
+        msg_data = self.get_guides_message_data(persistent=False)
         await interaction.followup.send(**msg_data)
 
 
 class DailyGuidesView(ui.LayoutView):
-    def __init__(self, date: datetime):
-        super().__init__(timeout=None)
+    def __init__(self, date: datetime, *, persistent: bool = False):
+        super().__init__(timeout=None if persistent else 900)
         date = date.astimezone(SKY_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
         self.date = date
 
