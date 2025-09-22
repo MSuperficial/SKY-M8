@@ -107,7 +107,6 @@ class Utility(commands.Cog):
         file="Use image by uploading image file.",
         url="Use image by reading from url.",
         sticker_name="The displayed name of your sticker.",
-        size="The size of made sticker in pixels, by default 320.",
         auto_crop="Whether to crop empty region around the image, by default True.",
         padding="Extra padding to image border, creating zoom in (negative) or out (positive) effect, by default 0% (no padding).",
         roundness="Relative size of rounded corner added to the sticker, by default 0% (no rounded corner)",
@@ -122,7 +121,6 @@ class Utility(commands.Cog):
         file: discord.Attachment | None = None,
         url: str | None = None,
         sticker_name: app_commands.Range[str, 0, 32] = "",
-        size: app_commands.Range[int, 128, 1024] = 320,
         auto_crop: bool = True,
         padding: app_commands.Range[float, -0.5, 0.5] = 0.0,
         roundness: app_commands.Range[float, 0.0, 1.0] = 0.0,
@@ -214,7 +212,7 @@ class Utility(commands.Cog):
 
         # 发送Sticker制作面板
         maker = MimicStickerMaker(
-            size=size,
+            size=320,
             auto_crop=auto_crop,
             padding=padding,
             roundness=roundness,
@@ -478,44 +476,6 @@ class MimicStickerMakerView(ui.LayoutView):
             msg_data = self.view.create_message(make_new=False)
             await interaction.edit_original_response(**msg_data)
 
-    class SetSizeButton(ui.Button["MimicStickerMakerView"]):
-        def __init__(self, size: int):
-            super().__init__(style=discord.ButtonStyle.secondary, label=str(size))
-
-        async def callback(self, interaction: Interaction):
-            assert self.view is not None
-            modal = ShortTextModal(
-                title="Set Image Size",
-                label="Size",
-                description="Image size must be between 128 and 1024",
-                default=self.label,
-                min_length=3,
-                max_length=4,
-            )
-            await interaction.response.send_modal(modal)
-            await modal.wait()
-
-            try:
-                size = int(modal.text.value)
-            except ValueError:
-                return
-            if size < 128 or size > 1024:
-                await interaction.followup.send(
-                    embed=fail(
-                        "Out of range",
-                        "Image size must be between 128 and 1024",
-                    ),
-                    ephemeral=True,
-                )
-                return
-            if self.label == str(size):
-                return
-
-            self.label = str(size)
-            self.view.maker.size = size
-            msg_data = self.view.create_message()
-            await interaction.edit_original_response(**msg_data)
-
     class CropToggleButton(ui.Button["MimicStickerMakerView"]):
         def __init__(self, value: bool):
             super().__init__(
@@ -728,13 +688,6 @@ class MimicStickerMakerView(ui.LayoutView):
                 ui.Section(
                     ui.TextDisplay("### Sticker Name\n-# The displayed name of your sticker"),
                     accessory=self.SetNameButton(sticker_name),
-                ),
-                ui.Separator(visible=False),
-                ui.Section(
-                    ui.TextDisplay(
-                        "### Sticker Size\n-# Size of the sticker in pixels (between 128 and 1024)"
-                    ),
-                    accessory=self.SetSizeButton(maker.size),
                 ),
                 ui.Separator(visible=False),
                 ui.Section(
